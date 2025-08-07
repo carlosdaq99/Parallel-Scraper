@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 class TuningParameters:
     """Configuration parameters that can be auto-tuned"""
 
-    # Proactive worker scaling parameters (20-100, starting at 50)
+    # Proactive worker scaling parameters (20-200, starting at 50)
     min_workers: int = 20
-    max_workers: int = 100
+    max_workers: int = 200  # Updated from 100 to 200
     scale_up_threshold: float = 0.90  # More aggressive scaling up
     scale_down_threshold: float = 0.80  # Conservative scaling down
     scale_up_increment: int = 10  # Scale up faster (+10)

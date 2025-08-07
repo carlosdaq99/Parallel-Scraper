@@ -40,9 +40,7 @@ try:
         get_auto_tuning_engine,
         initialize_auto_tuning,
     )
-    from config import (
-        get_enhanced_config as get_dynamic_config,
-    )  # Alias for compatibility
+    from enhanced_config_manager import get_dynamic_config
 
     ADAPTIVE_MODULES_AVAILABLE = True
 except ImportError as e:

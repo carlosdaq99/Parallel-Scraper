@@ -29,9 +29,7 @@ except ImportError:
 
 
 try:
-    from config import (
-        get_enhanced_config as get_dynamic_config,
-    )  # Alias for compatibility
+    from enhanced_config_manager import get_dynamic_config
 
     ENHANCED_CONFIG_AVAILABLE = True
 except ImportError:
@@ -74,9 +72,9 @@ def initialize_adaptive_scaling() -> Dict[str, Any]:
 def initialize_scaling_config() -> Dict[str, Any]:
     """Initialize proactive adaptive scaling configuration for maximum output."""
     return {
-        # Proactive Worker Range Configuration (20-200, starting at 50)
+        # Proactive Worker Range Configuration (20-100, starting at 50)
         "min_workers": 20,  # Minimum workers for baseline performance
-        "max_workers": 200,  # Maximum workers for peak load (updated from 100)
+        "max_workers": 100,  # Maximum workers for peak load
         "initial_workers": 50,  # Starting worker count for immediate capacity
         # Proactive Performance Thresholds (aggressive scaling up)
         "scale_up_success_rate_threshold": 0.90,  # Scale up more aggressively

@@ -45,7 +45,10 @@ try:
         make_scaling_decision_simple,
         set_current_worker_count,
     )
-    from config import get_enhanced_config
+    from enhanced_config_manager import (
+        initialize_dynamic_config,
+        get_dynamic_config,
+    )
     from auto_tuning_engine import (
         initialize_auto_tuning,
         get_auto_tuning_engine,
@@ -96,13 +99,13 @@ def update_worker_count(new_count: int, reason: str = "Adaptive scaling") -> Non
 
     # Get dynamic config for limits (proactive scaling: 20-100 workers)
     try:
-        config_dict = get_enhanced_config()
-        max_workers = config_dict.get("max_workers", 200)  # Updated fallback to 200
+        config_dict = get_dynamic_config()
+        max_workers = config_dict.get("max_workers", 100)
         min_workers = config_dict.get("min_workers", 20)
         print(f"🔧 CONFIG DEBUG: min={min_workers}, max={max_workers}")
     except Exception as e:
         print(f"🔧 CONFIG ERROR: {e}, using defaults")
-        max_workers = 200  # Updated fallback to 200
+        max_workers = 100
         min_workers = 20
 
     # Validate new count within proactive range
@@ -171,8 +174,8 @@ def initialize_adaptive_scaling() -> None:
     """Initialize the adaptive scaling system with FIXED scaling engine."""
     global _adaptive_workers
 
-    # Dynamic configuration is now handled by config.py
-    # No initialization needed
+    # Initialize dynamic configuration
+    initialize_dynamic_config()
 
     # CRITICAL: Set initial worker count in FIXED scaling engine
     set_current_worker_count(_adaptive_workers)
@@ -267,10 +270,8 @@ async def perform_adaptive_scaling_check(
         # Apply the scaling decision from the FIXED engine
         if scaling_decision.get("action") == "scale_up":
             # Get dynamic scaling increment from config (no hardcoded fallback)
-            enhanced_config = get_enhanced_config()
-            scale_increment = enhanced_config.get(
-                "worker_scale_increment", 20
-            )  # Now uses user's 20
+            dynamic_config = get_dynamic_config()
+            scale_increment = dynamic_config.get("worker_scale_increment", 10)
             target_workers = scaling_decision.get(
                 "target_workers", current_workers + scale_increment
             )
@@ -315,10 +316,8 @@ async def perform_adaptive_scaling_check(
 
         elif scaling_decision.get("action") == "scale_down":
             # Get dynamic scaling decrement from config (no hardcoded fallback)
-            enhanced_config = get_enhanced_config()
-            scale_decrement = enhanced_config.get(
-                "worker_scale_decrement", 10
-            )  # Now uses user's 10
+            dynamic_config = get_dynamic_config()
+            scale_decrement = dynamic_config.get("worker_scale_decrement", 5)
             target_workers = scaling_decision.get(
                 "target_workers", current_workers - scale_decrement
             )
