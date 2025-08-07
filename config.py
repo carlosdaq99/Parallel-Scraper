@@ -15,146 +15,180 @@ class ScraperConfig:
 
     # ============================================================================
     # TARGET DOCUMENTATION CONFIGURATION
+    # Defines the starting point and scope of the scraping operation.
     # ============================================================================
     START_URL = "https://help.autodesk.com/view/OARX/2025/ENU/"
+    """The initial URL where the scraper begins its operation."""
+
     FOLDER_LABEL = "ObjectARX and Managed .NET"
+    """The label of the root folder to identify and start scraping from."""
 
     # ============================================================================
     # DOM SELECTOR CONFIGURATION
+    # Defines the CSS selectors used to find and interact with elements on the page.
     # ============================================================================
     EXPAND_BUTTON_SELECTOR = 'span.expand-collapse[role="button"]'
+    """CSS selector for the button that expands a folder to reveal its children."""
+
     TREEITEM_SELECTOR = '[role="treeitem"]'
+    """CSS selector for a single item in the documentation tree structure."""
 
     # ============================================================================
     # OUTPUT CONFIGURATION
+    # Specifies where the scraped data will be saved.
     # ============================================================================
     OUTPUT_FILE = "objectarx_structure_map_parallel.json"
+    """File name for the final JSON output containing the scraped data."""
 
     # ============================================================================
     # PARALLEL PROCESSING CONFIGURATION
+    # Controls the concurrency and scaling behavior of the scraper.
     # ============================================================================
-    # PROACTIVE SCALING CONFIGURATION
-    # Maximize output while staying within safe resource limits
-    # ============================================================================
-    MAX_CONCURRENT_PAGES = int(
-        os.getenv("SCRAPER_MAX_CONCURRENT_PAGES", "100")
-    )  # Increased for higher throughput
-    MAX_WORKERS = int(
-        os.getenv("SCRAPER_MAX_WORKERS", "100")
-    )  # Maximum limit for scaling
-    MIN_WORKERS = int(
-        os.getenv("SCRAPER_MIN_WORKERS", "20")
-    )  # Minimum workers for scaling down
-    INITIAL_WORKERS = int(
-        os.getenv("SCRAPER_INITIAL_WORKERS", "50")
-    )  # Starting worker count
+    MAX_CONCURRENT_PAGES = int(os.getenv("SCRAPER_MAX_CONCURRENT_PAGES", "100"))
+    """The absolute maximum number of concurrent browser pages allowed."""
+
+    MAX_WORKERS = int(os.getenv("SCRAPER_MAX_WORKERS", "100"))
+    """The upper limit for the adaptive scaling engine."""
+
+    MIN_WORKERS = int(os.getenv("SCRAPER_MIN_WORKERS", "20"))
+    """The lower limit for the adaptive scaling engine."""
+
+    INITIAL_WORKERS = int(os.getenv("SCRAPER_INITIAL_WORKERS", "50"))
+    """The number of workers to start with, for proactive scaling."""
+
     MAX_DEPTH = int(os.getenv("SCRAPER_MAX_DEPTH", "999"))
+    """The maximum depth to traverse in the documentation tree."""
+
     MAX_SUBFOLDERS_TO_SPAWN = int(os.getenv("SCRAPER_MAX_SUBFOLDERS", "100"))
+    """The maximum number of subfolders a single worker can spawn tasks for."""
 
     # ============================================================================
     # TIMING CONFIGURATION
+    # Fine-tunes the delays and timeouts for various operations.
     # ============================================================================
     WORKER_STARTUP_DELAY = float(os.getenv("SCRAPER_STARTUP_DELAY", "0.05"))
+    """Delay between starting each worker to prevent overwhelming the system."""
+
     PAGE_LOAD_TIMEOUT = float(os.getenv("SCRAPER_PAGE_TIMEOUT", "30.0"))
+    """Maximum time to wait for a page to load, in seconds."""
+
     DOM_OPERATION_TIMEOUT = float(os.getenv("SCRAPER_DOM_TIMEOUT", "15.0"))
+    """Maximum time to wait for a single DOM operation to complete, in seconds."""
+
     WORKER_SHUTDOWN_TIMEOUT = float(os.getenv("SCRAPER_SHUTDOWN_TIMEOUT", "5.0"))
-    PAGE_WAIT_AFTER_EXPAND = int(
-        os.getenv("SCRAPER_EXPAND_WAIT", "500")
-    )  # milliseconds
+    """Maximum time to wait for a worker to shut down gracefully, in seconds."""
+
+    PAGE_WAIT_AFTER_EXPAND = int(os.getenv("SCRAPER_EXPAND_WAIT", "500"))
+    """Time to wait after expanding a node to allow content to load, in milliseconds."""
 
     # ============================================================================
     # MONITORING AND SCALING INTERVALS
+    # Configures how frequently the system monitors performance and makes scaling decisions.
     # ============================================================================
-    # Dashboard and monitoring timing intervals
-    DASHBOARD_UPDATE_INTERVAL = float(
-        os.getenv("SCRAPER_DASHBOARD_INTERVAL", "30.0")
-    )  # seconds
-    DASHBOARD_DEMO_INTERVAL = float(
-        os.getenv("SCRAPER_DASHBOARD_DEMO", "5.0")
-    )  # seconds for demo mode
+    DASHBOARD_UPDATE_INTERVAL = float(os.getenv("SCRAPER_DASHBOARD_INTERVAL", "10.0"))
+    """Frequency of real-time dashboard updates, in seconds."""
 
-    # Trend analysis configuration
-    TREND_ANALYSIS_MIN_SAMPLES = int(
-        os.getenv("SCRAPER_TREND_MIN_SAMPLES", "2")
-    )  # minimum samples for trends
-    TREND_ANALYSIS_HISTORY_SIZE = int(
-        os.getenv("SCRAPER_TREND_HISTORY_SIZE", "10")
-    )  # maximum history samples
-    TREND_COLLECTION_INTERVAL = float(
-        os.getenv("SCRAPER_TREND_COLLECTION", "5.0")
-    )  # seconds between trend samples
+    DASHBOARD_DEMO_INTERVAL = float(os.getenv("SCRAPER_DASHBOARD_DEMO", "5.0"))
+    """Update interval for the dashboard's demo mode, in seconds."""
 
-    # Scaling decision timing
-    SCALING_CHECK_INTERVAL = float(os.getenv("SCRAPER_SCALING_CHECK", "5.0"))  # seconds
-    SCALING_MONITOR_INTERVAL = float(
-        os.getenv("SCRAPER_SCALING_MONITOR", "20.0")
-    )  # seconds
-    ADAPTIVE_SCALING_INTERVAL = float(
-        os.getenv("SCRAPER_ADAPTIVE_SCALING", "30.0")
-    )  # seconds
+    TREND_ANALYSIS_MIN_SAMPLES = int(os.getenv("SCRAPER_TREND_MIN_SAMPLES", "5"))
+    """Minimum number of data points required to perform trend analysis."""
 
-    # Worker coordination timing
-    WORKER_STARTUP_BATCH_DELAY = float(
-        os.getenv("SCRAPER_WORKER_BATCH_DELAY", "1.0")
-    )  # seconds
-    WORKER_STATUS_CHECK_DELAY = float(
-        os.getenv("SCRAPER_WORKER_STATUS_DELAY", "2.0")
-    )  # seconds
-    WORKER_COORDINATION_DELAY = float(
-        os.getenv("SCRAPER_WORKER_COORD_DELAY", "0.05")
-    )  # seconds
-    WORKER_TASK_YIELD_DELAY = float(
-        os.getenv("SCRAPER_TASK_YIELD_DELAY", "0.0")
-    )  # seconds - allow other tasks to run
+    TREND_ANALYSIS_HISTORY_SIZE = int(os.getenv("SCRAPER_TREND_HISTORY_SIZE", "10"))
+    """Maximum number of historical data points to store for trend analysis."""
 
-    # DOM operation timing
-    DOM_RETRY_DELAY = float(os.getenv("SCRAPER_DOM_RETRY_DELAY", "0.5"))  # seconds
+    TREND_COLLECTION_INTERVAL = float(os.getenv("SCRAPER_TREND_COLLECTION", "2.0"))
+    """Frequency of collecting data for trend analysis, in seconds."""
 
-    # Terminal output control
-    TERMINAL_OUTPUT_SUPPRESSION = float(
-        os.getenv("SCRAPER_TERMINAL_SUPPRESS", "0.5")
-    )  # seconds
+    SCALING_CHECK_INTERVAL = float(os.getenv("SCRAPER_SCALING_CHECK", "2.0"))
+    """Frequency of checking if a scaling decision should be made, in seconds."""
+
+    SCALING_MONITOR_INTERVAL = float(os.getenv("SCRAPER_SCALING_MONITOR", "6.0"))
+    """Frequency of monitoring system performance for scaling purposes, in seconds."""
+
+    ADAPTIVE_SCALING_INTERVAL = float(os.getenv("SCRAPER_ADAPTIVE_SCALING", "10.0"))
+    """The main interval for the adaptive scaling engine to make decisions, in seconds."""
+
+    WORKER_STARTUP_BATCH_DELAY = float(os.getenv("SCRAPER_WORKER_BATCH_DELAY", "1.0"))
+    """Delay between starting batches of workers, in seconds."""
+
+    WORKER_STATUS_CHECK_DELAY = float(os.getenv("SCRAPER_WORKER_STATUS_DELAY", "1.0"))
+    """Delay between checking the status of workers, in seconds."""
+
+    WORKER_COORDINATION_DELAY = float(os.getenv("SCRAPER_WORKER_COORD_DELAY", "0.05"))
+    """Small delay for coordinating actions between workers, in seconds."""
+
+    WORKER_TASK_YIELD_DELAY = float(os.getenv("SCRAPER_TASK_YIELD_DELAY", "0.0"))
+    """Delay to allow other asyncio tasks to run, in seconds."""
+
+    DOM_RETRY_DELAY = float(os.getenv("SCRAPER_DOM_RETRY_DELAY", "0.5"))
+    """Delay between retrying a failed DOM operation, in seconds."""
+
+    TERMINAL_OUTPUT_SUPPRESSION = float(os.getenv("SCRAPER_TERMINAL_SUPPRESS", "2.0"))
+    """Delay to suppress terminal output to avoid flickering, in seconds."""
 
     # ============================================================================
     # RETRY CONFIGURATION
+    # Defines the behavior for retrying failed operations.
     # ============================================================================
     MAX_RETRIES = int(os.getenv("SCRAPER_MAX_RETRIES", "3"))
+    """Maximum number of times to retry a failed task."""
+
     RETRY_DELAY_BASE = float(os.getenv("SCRAPER_RETRY_DELAY", "1.0"))
+    """The base delay for retries, in seconds. Used with exponential backoff."""
+
     EXPONENTIAL_BACKOFF_MULTIPLIER = float(
         os.getenv("SCRAPER_BACKOFF_MULTIPLIER", "2.0")
     )
+    """Multiplier for exponential backoff between retries."""
 
     # ============================================================================
     # BROWSER CONFIGURATION
+    # Configures the behavior of the Playwright browser instances.
     # ============================================================================
     BROWSER_HEADLESS = os.getenv("SCRAPER_HEADLESS", "true").lower() == "true"
+    """Whether to run the browser in headless mode (no GUI)."""
+
     BROWSER_SLOW_MO = int(os.getenv("SCRAPER_SLOW_MO", "0"))
-    BROWSER_TIMEOUT = int(os.getenv("SCRAPER_BROWSER_TIMEOUT", "30000"))  # 30 seconds
+    """Slows down Playwright operations by the specified amount in milliseconds. Useful for debugging."""
+
+    BROWSER_TIMEOUT = int(os.getenv("SCRAPER_BROWSER_TIMEOUT", "30000"))
+    """Default timeout for browser operations, in milliseconds."""
 
     # ============================================================================
     # LOGGING CONFIGURATION
+    # Defines the settings for logging application events.
     # ============================================================================
     LOG_LEVEL = os.getenv("SCRAPER_LOG_LEVEL", "INFO")
+    """The minimum level of log messages to record."""
+
     LOG_FORMAT = os.getenv(
         "SCRAPER_LOG_FORMAT",
         "%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d): %(message)s",
     )
+    """The format string for log messages."""
+
     LOG_DATE_FORMAT = os.getenv("SCRAPER_LOG_DATE_FORMAT", "%Y-%m-%d %H:%M:%S")
+    """The format string for dates in log messages."""
 
     # ============================================================================
     # PERFORMANCE MONITORING
+    # Configures how frequently progress is reported.
     # ============================================================================
     PROGRESS_REPORT_INTERVAL = int(os.getenv("SCRAPER_PROGRESS_INTERVAL", "10"))
+    """Interval for reporting progress to the console, in seconds."""
 
     # ============================================================================
     # REAL-TIME MONITORING DASHBOARD
+    # Configures the real-time terminal dashboard.
     # ============================================================================
     REAL_TIME_MONITOR_ENABLED = (
         os.getenv("SCRAPER_MONITOR_ENABLED", "true").lower() == "true"
     )
-    REAL_TIME_MONITOR_INTERVAL = int(
-        os.getenv("SCRAPER_MONITOR_INTERVAL", "30")
-    )  # seconds
+    """Whether to enable the real-time monitoring dashboard."""
+
+    REAL_TIME_MONITOR_INTERVAL = int(os.getenv("SCRAPER_MONITOR_INTERVAL", "10"))
+    """Update interval for the real-time monitor, in seconds."""
 
 
 class OptimizationConfig:
@@ -162,9 +196,14 @@ class OptimizationConfig:
 
     # ============================================================================
     # BROWSER OPTIMIZATION SETTINGS
+    # Controls browser reuse, pooling, and launch options.
     # ============================================================================
     BROWSER_REUSE_ENABLED = os.getenv("OPT_BROWSER_REUSE", "true").lower() == "true"
+    """Whether to reuse browser instances to reduce startup overhead."""
+
     BROWSER_POOL_SIZE = int(os.getenv("OPT_BROWSER_POOL_SIZE", "3"))
+    """The number of browser instances to maintain in the pool."""
+
     BROWSER_LAUNCH_OPTIONS = {
         "headless": os.getenv("OPT_BROWSER_HEADLESS", "true").lower() == "true",
         "args": [
@@ -174,47 +213,77 @@ class OptimizationConfig:
             "--disable-features=VizDisplayCompositor",
         ],
     }
+    """Command-line arguments for launching browser instances."""
 
     # ============================================================================
     # RESOURCE FILTERING SETTINGS
+    # Configures which network resources to block for faster page loads.
     # ============================================================================
     RESOURCE_FILTERING_ENABLED = (
         os.getenv("OPT_RESOURCE_FILTERING", "true").lower() == "true"
     )
+    """Whether to enable resource filtering."""
+
     BLOCKED_RESOURCE_TYPES = ["image", "media", "font", "stylesheet", "other"]
+    """A list of resource types to block."""
+
     ALLOWED_DOMAINS = ["help.autodesk.com"]
+    """A list of domains from which resources are allowed."""
 
     # ============================================================================
     # MEMORY MANAGEMENT SETTINGS
+    # Controls how the application manages memory to prevent leaks.
     # ============================================================================
     MEMORY_MANAGEMENT_ENABLED = (
         os.getenv("OPT_MEMORY_MANAGEMENT", "true").lower() == "true"
     )
+    """Whether to enable memory management features."""
+
     MAX_MEMORY_MB = int(os.getenv("OPT_MAX_MEMORY_MB", "512"))
+    """The maximum memory usage allowed before triggering cleanup, in megabytes."""
+
     GARBAGE_COLLECTION_INTERVAL = int(os.getenv("OPT_GC_INTERVAL", "100"))
+    """The interval (in number of operations) for running garbage collection."""
 
     # ============================================================================
     # ORCHESTRATOR SETTINGS
+    # Configures the high-level orchestration of workers and tasks.
     # ============================================================================
     ORCHESTRATOR_ENABLED = os.getenv("OPT_ORCHESTRATOR", "false").lower() == "true"
+    """Whether to enable the advanced orchestrator."""
+
     MAX_WORKERS = int(os.getenv("OPT_MAX_WORKERS", "10"))
+    """The maximum number of workers for the orchestrator."""
+
     WORKER_QUEUE_SIZE = int(os.getenv("OPT_QUEUE_SIZE", "100"))
+    """The size of the queue for the orchestrator's workers."""
 
     # ============================================================================
     # MONITORING SETTINGS
+    # Configures the collection and logging of performance metrics.
     # ============================================================================
     MONITORING_ENABLED = os.getenv("OPT_MONITORING", "true").lower() == "true"
+    """Whether to enable performance monitoring."""
+
     METRICS_COLLECTION_INTERVAL = int(os.getenv("OPT_METRICS_INTERVAL", "30"))
+    """The interval for collecting performance metrics, in seconds."""
+
     PERFORMANCE_LOGGING = os.getenv("OPT_PERFORMANCE_LOG", "true").lower() == "true"
+    """Whether to log performance metrics."""
 
     # ============================================================================
     # FALLBACK SETTINGS
+    # Defines behavior for handling errors in the optimization framework.
     # ============================================================================
     FALLBACK_ON_ERROR = os.getenv("OPT_FALLBACK", "true").lower() == "true"
-    OPTIMIZATION_TIMEOUT = int(os.getenv("OPT_TIMEOUT", "10"))  # seconds
+    """Whether to fall back to a basic mode on optimization errors."""
+
+    OPTIMIZATION_TIMEOUT = int(os.getenv("OPT_TIMEOUT", "10"))
+    """Timeout for optimization operations, in seconds."""
 
     # ============================================================================
     # PRESET CONFIGURATIONS
+    # Provides predefined configurations for different environments.
     # ============================================================================
     @classmethod
     def create_minimal_config(cls):
@@ -257,22 +326,36 @@ class TestingConfig:
 
     # ============================================================================
     # TEST EXECUTION SETTINGS
+    # Controls how tests are executed.
     # ============================================================================
-    TEST_TIMEOUT = int(os.getenv("TEST_TIMEOUT", "30"))  # seconds
+    TEST_TIMEOUT = int(os.getenv("TEST_TIMEOUT", "30"))
+    """Timeout for test execution, in seconds."""
+
     INTEGRATION_TEST_ENABLED = os.getenv("INTEGRATION_TEST", "true").lower() == "true"
+    """Whether to run integration tests."""
+
     PERFORMANCE_TEST_ENABLED = os.getenv("PERFORMANCE_TEST", "true").lower() == "true"
+    """Whether to run performance tests."""
 
     # ============================================================================
     # TEST DATA SETTINGS
+    # Defines the data and resources used for testing.
     # ============================================================================
     TEST_URL = os.getenv("TEST_URL", "https://help.autodesk.com/view/OARX/2025/ENU/")
+    """The URL to use for testing."""
+
     TEST_OUTPUT_DIR = os.getenv("TEST_OUTPUT_DIR", "test_outputs")
+    """The directory for saving test outputs."""
 
     # ============================================================================
     # VALIDATION SETTINGS
+    # Configures how test results are validated.
     # ============================================================================
     VALIDATION_ENABLED = os.getenv("VALIDATION_ENABLED", "true").lower() == "true"
+    """Whether to enable validation of test results."""
+
     STRICT_VALIDATION = os.getenv("STRICT_VALIDATION", "false").lower() == "true"
+    """Whether to use strict validation rules."""
 
 
 class AppConfig:

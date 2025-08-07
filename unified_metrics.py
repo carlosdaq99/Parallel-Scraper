@@ -22,6 +22,12 @@ try:
 except ImportError:
     SYSTEM_MONITORING_AVAILABLE = False
 
+try:
+    from adaptive_scaling_engine import get_current_worker_count
+    ADAPTIVE_SCALING_AVAILABLE = True
+except ImportError:
+    ADAPTIVE_SCALING_AVAILABLE = False
+
 
 class UnifiedMetrics:
     """Unified metrics collection for both dashboard and scaling engine"""
@@ -108,14 +114,23 @@ class UnifiedMetrics:
             )
             total_processed = completed_count + failed_count
 
-            # Worker counts
-            active_workers = 0
+            # Worker counts - both active and target
+            active_workers = 0  # Currently busy workers
+            target_workers = 50  # Target worker count from scaling engine
             max_workers = 50
 
+            # Get currently active (busy) workers
             if hasattr(self.worker_context, "worker_manager") and hasattr(
                 self.worker_context.worker_manager, "active_workers"
             ):
                 active_workers = len(self.worker_context.worker_manager.active_workers)
+
+            # Get target worker count from adaptive scaling engine
+            if ADAPTIVE_SCALING_AVAILABLE:
+                try:
+                    target_workers = get_current_worker_count()
+                except Exception:
+                    target_workers = 50  # Fallback value
 
             if hasattr(self.worker_context, "max_workers"):
                 max_workers = self.worker_context.max_workers
@@ -130,7 +145,8 @@ class UnifiedMetrics:
                 {
                     "total_processed": total_processed,
                     "total_failed": failed_count,
-                    "active_workers": active_workers,
+                    "active_workers": target_workers,  # Show target workers for scaling visibility
+                    "busy_workers": active_workers,    # Show actually busy workers
                     "max_workers": max_workers,
                     "queue_size": queue_size,
                     "queue_length": queue_size,  # Dashboard compatibility
@@ -172,9 +188,11 @@ class UnifiedMetrics:
     def _calculate_derived_metrics(self, metrics: dict):
         """Calculate derived metrics consistently"""
 
-        # Worker utilization (both formats)
-        if metrics["max_workers"] > 0:
-            utilization_decimal = metrics["active_workers"] / metrics["max_workers"]
+        # Worker utilization (both formats) - busy workers vs target workers
+        if metrics["active_workers"] > 0:  # active_workers is now target_workers
+            # Calculate how busy the target workforce is
+            utilization_decimal = metrics.get("busy_workers", 0) / metrics["active_workers"]
+            utilization_decimal = min(1.0, utilization_decimal)  # Cap at 100%
             metrics["worker_utilization"] = (
                 utilization_decimal  # 0-1.0 for scaling engine
             )
@@ -182,10 +200,10 @@ class UnifiedMetrics:
                 utilization_decimal * 100
             )  # 0-100% for dashboard
 
-        # Queue to worker ratio
-        if metrics["max_workers"] > 0:
+        # Queue to worker ratio - queue vs target workers
+        if metrics["active_workers"] > 0:  # active_workers is now target_workers
             metrics["queue_to_worker_ratio"] = (
-                metrics["queue_size"] / metrics["max_workers"]
+                metrics["queue_size"] / metrics["active_workers"]
             )
 
         # Resource capacity

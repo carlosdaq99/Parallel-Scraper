@@ -21,7 +21,7 @@ try:
 except ImportError:
     # Fallback for standalone execution
     class ScraperConfig:
-        DASHBOARD_UPDATE_INTERVAL = 30.0
+        DASHBOARD_UPDATE_INTERVAL = 10.0  # Match config.py value
         DASHBOARD_DEMO_INTERVAL = 5.0
         TERMINAL_OUTPUT_SUPPRESSION = 0.5
         TREND_ANALYSIS_MIN_SAMPLES = 2
@@ -107,7 +107,7 @@ class RealTimeMonitor:
         """Initialize the real-time monitor
 
         Args:
-            update_interval: Update interval in seconds (default 30)
+            update_interval: Update interval in seconds (default 10)
             worker_context: Active worker context for real metrics collection
         """
         self.update_interval = (
