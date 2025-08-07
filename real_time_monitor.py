@@ -64,6 +64,7 @@ class DashboardMetrics:
     active_workers: Optional[int] = None
     queue_length: Optional[int] = None
     browser_pool_size: Optional[int] = None
+    browser_pool_status: Optional[str] = None  # Status info for browser pool
 
     # System metrics
     cpu_usage: Optional[float] = None
@@ -286,6 +287,9 @@ class RealTimeMonitor:
                 metrics.active_workers = unified_data.get("active_workers")
                 metrics.queue_length = unified_data.get("queue_length")
                 metrics.browser_pool_size = unified_data.get("browser_pool_size")
+                metrics.browser_pool_status = unified_data.get(
+                    "browser_pool_status", "Unknown"
+                )
                 metrics.pages_per_second = unified_data.get("pages_per_second")
                 metrics.worker_utilization = unified_data.get(
                     "worker_utilization"
@@ -301,6 +305,19 @@ class RealTimeMonitor:
                 metrics.cpu_usage = unified_data.get("cpu_usage_percent")
                 metrics.memory_usage_mb = unified_data.get("memory_usage_mb")
                 metrics.memory_usage_percent = unified_data.get("memory_usage_percent")
+
+                # Map adaptive scaling fields (FIX: Data Mapping Disconnect)
+                metrics.scaling_status = unified_data.get("scaling_status")
+                metrics.auto_tuning_active = unified_data.get(
+                    "auto_tuning_active", False
+                )
+                metrics.last_scaling_action = unified_data.get("last_scaling_action")
+                metrics.pattern_detected = unified_data.get("pattern_detected")
+                metrics.config_updates = unified_data.get("config_updates", 0)
+
+                # Mark as having adaptive data if data is available
+                if unified_data.get("has_adaptive_data", False):
+                    metrics.has_adaptive_data = True
 
                 # Mark as having data
                 if metrics.total_processed and metrics.total_processed > 0:
@@ -425,19 +442,27 @@ class RealTimeMonitor:
                 # Try to get browser pool size from optimization_utils
                 # Scale browser pool with worker count for efficiency
                 current_pool_size = 0  # Default value
-                optimal_browsers = min(
-                    6, max(1, total_worker_pool_size // 17)
-                )  # Default calculation
+
+                # For 6-browser pool: recommend full capacity when >=85 workers (85/17 = 5 browsers minimum)
+                if total_worker_pool_size >= 85:
+                    optimal_browsers = 6  # Use full configured capacity
+                else:
+                    optimal_browsers = min(6, max(1, total_worker_pool_size // 17))
 
                 try:
                     from optimization_utils import _browser_pool, OptimizationConfig
 
                     current_pool_size = len(_browser_pool)
-                    # Recalculate optimal browsers with actual config
-                    optimal_browsers = min(
-                        OptimizationConfig.BROWSER_POOL_SIZE,
-                        max(1, total_worker_pool_size // 17),
-                    )  # ~17 workers per browser
+                    # Use consistent recommendation logic with configured pool size
+                    if total_worker_pool_size >= 85:
+                        optimal_browsers = (
+                            OptimizationConfig.BROWSER_POOL_SIZE
+                        )  # Use full configured capacity
+                    else:
+                        optimal_browsers = min(
+                            OptimizationConfig.BROWSER_POOL_SIZE,
+                            max(1, total_worker_pool_size // 17),
+                        )  # ~17 workers per browser
 
                     # Store browser scaling recommendation
                     if current_pool_size < optimal_browsers:
@@ -600,8 +625,12 @@ class RealTimeMonitor:
             print(
                 f"Active Workers:    {metrics.active_workers or 0:>10} | Queue Length:     {metrics.queue_length or 0:>10}"
             )
+            # Format browser pool info with status
+            browser_info = f"{metrics.browser_pool_size or 0}"
+            if metrics.browser_pool_status:
+                browser_info += f" {metrics.browser_pool_status}"
             print(
-                f"Browser Pool:      {metrics.browser_pool_size or 0:>10} | Timestamp:        {metrics.timestamp:>10}"
+                f"Browser Pool:      {browser_info:>15} | Timestamp:        {metrics.timestamp:>10}"
             )
         else:
             if (

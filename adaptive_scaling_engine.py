@@ -28,6 +28,14 @@ except ImportError:
         ADAPTIVE_SCALING_INTERVAL = 30.0
 
 
+try:
+    from enhanced_config_manager import get_dynamic_config
+
+    ENHANCED_CONFIG_AVAILABLE = True
+except ImportError:
+    ENHANCED_CONFIG_AVAILABLE = False
+
+
 import statistics
 import psutil
 import os
@@ -78,9 +86,9 @@ def initialize_scaling_config() -> Dict[str, Any]:
         "max_cpu_usage_percent": 90.0,
         "scale_down_memory_threshold": 60.0,
         "scale_down_cpu_threshold": 70.0,
-        # Proactive Scaling Behavior (faster scaling up, controlled scaling down)
-        "scale_up_increment": 5,  # Scale up by 5 workers at a time
-        "scale_down_increment": 2,  # Scale down more conservatively
+        # Proactive Scaling Behavior (centralized configuration)
+        "scale_up_increment": 10,  # Scale up by 10 workers (matches enhanced config)
+        "scale_down_increment": 5,  # Scale down by 5 workers (matches enhanced config)
         "scaling_cooldown_seconds": 45.0,  # Shorter cooldown for responsiveness
         # Monitoring Intervals (more frequent monitoring)
         "monitoring_interval": ScraperConfig.SCALING_MONITOR_INTERVAL,  # Check every 20 seconds
@@ -222,10 +230,34 @@ class ScalingDecision:
 
 
 def get_scaling_config() -> Dict[str, Any]:
-    """Get the current scaling configuration."""
+    """Get the current scaling configuration, integrating with enhanced config manager."""
     global _scaling_config
     if not _scaling_config:
         _scaling_config = initialize_scaling_config()
+
+        # INTEGRATION: Override with enhanced config manager values if available
+        if ENHANCED_CONFIG_AVAILABLE:
+            try:
+                enhanced_config = get_dynamic_config()
+                if enhanced_config:
+                    # Override scaling increments with centralized config
+                    if "worker_scale_increment" in enhanced_config:
+                        _scaling_config["scale_up_increment"] = enhanced_config[
+                            "worker_scale_increment"
+                        ]
+                    if "worker_scale_decrement" in enhanced_config:
+                        _scaling_config["scale_down_increment"] = enhanced_config[
+                            "worker_scale_decrement"
+                        ]
+
+                    print(
+                        f"🔧 ADAPTIVE SCALING: Integrated enhanced config - "
+                        f"scale_up_increment={_scaling_config['scale_up_increment']}, "
+                        f"scale_down_increment={_scaling_config['scale_down_increment']}"
+                    )
+            except Exception as e:
+                print(f"⚠️  ADAPTIVE SCALING: Failed to integrate enhanced config: {e}")
+
     return _scaling_config
 
 

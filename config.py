@@ -44,10 +44,10 @@ class ScraperConfig:
     # PARALLEL PROCESSING CONFIGURATION
     # Controls the concurrency and scaling behavior of the scraper.
     # ============================================================================
-    MAX_CONCURRENT_PAGES = int(os.getenv("SCRAPER_MAX_CONCURRENT_PAGES", "100"))
+    MAX_CONCURRENT_PAGES = int(os.getenv("SCRAPER_MAX_CONCURRENT_PAGES", "200"))
     """The absolute maximum number of concurrent browser pages allowed."""
 
-    MAX_WORKERS = int(os.getenv("SCRAPER_MAX_WORKERS", "100"))
+    MAX_WORKERS = int(os.getenv("SCRAPER_MAX_WORKERS", "200"))
     """The upper limit for the adaptive scaling engine."""
 
     MIN_WORKERS = int(os.getenv("SCRAPER_MIN_WORKERS", "20"))
@@ -201,8 +201,8 @@ class OptimizationConfig:
     BROWSER_REUSE_ENABLED = os.getenv("OPT_BROWSER_REUSE", "true").lower() == "true"
     """Whether to reuse browser instances to reduce startup overhead."""
 
-    BROWSER_POOL_SIZE = int(os.getenv("OPT_BROWSER_POOL_SIZE", "3"))
-    """The number of browser instances to maintain in the pool."""
+    BROWSER_POOL_SIZE = int(os.getenv("OPT_BROWSER_POOL_SIZE", "6"))
+    """The number of browser instances to maintain in the pool. Set to 6 to support 102 workers (17 workers per browser)."""
 
     BROWSER_LAUNCH_OPTIONS = {
         "headless": os.getenv("OPT_BROWSER_HEADLESS", "true").lower() == "true",

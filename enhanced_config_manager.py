@@ -100,8 +100,8 @@ def initialize_dynamic_config() -> Dict[str, Any]:
         "initial_workers": getattr(
             ScraperConfig, "INITIAL_WORKERS", 50
         ),  # Starting worker count
-        "worker_scale_increment": 5,  # Aggressive scale-up (+5)
-        "worker_scale_decrement": 2,  # Conservative scale-down (-2)
+        "worker_scale_increment": 20,  # Aggressive scale-up (+10)
+        "worker_scale_decrement": 10,  # Conservative scale-down (-5)
         "performance_threshold_high": 0.95,
         "performance_threshold_low": 0.80,
         "memory_threshold_mb": 500,

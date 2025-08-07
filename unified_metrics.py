@@ -24,6 +24,7 @@ except ImportError:
 
 try:
     from adaptive_scaling_engine import get_current_worker_count
+
     ADAPTIVE_SCALING_AVAILABLE = True
 except ImportError:
     ADAPTIVE_SCALING_AVAILABLE = False
@@ -83,12 +84,31 @@ class UnifiedMetrics:
             # Use scaling engine data as fallback
             from main_self_contained import get_current_workers
 
-            metrics["current_workers"] = get_current_workers()
-            metrics["max_workers"] = get_current_workers()
+            current_workers = get_current_workers()
+            metrics["current_workers"] = current_workers
+            metrics["max_workers"] = current_workers
+
+            # Get target worker count from adaptive scaling engine (fallback path)
+            if ADAPTIVE_SCALING_AVAILABLE:
+                try:
+                    target_workers = get_current_worker_count()
+                    metrics["active_workers"] = (
+                        target_workers  # Use target workers as active_workers for dashboard
+                    )
+                except Exception as e:
+                    metrics["active_workers"] = (
+                        current_workers  # Fallback to current_workers
+                    )
+            else:
+                metrics["active_workers"] = current_workers
 
         # Collect system resources if available
         if SYSTEM_MONITORING_AVAILABLE:
             self._collect_system_resources(metrics)
+
+        # Collect adaptive scaling data if available
+        if ADAPTIVE_SCALING_AVAILABLE:
+            self._collect_adaptive_scaling_data(metrics)
 
         # Calculate derived metrics
         self._calculate_derived_metrics(metrics)
@@ -129,8 +149,10 @@ class UnifiedMetrics:
             if ADAPTIVE_SCALING_AVAILABLE:
                 try:
                     target_workers = get_current_worker_count()
-                except Exception:
+                except Exception as e:
                     target_workers = 50  # Fallback value
+            else:
+                target_workers = 50  # Fallback if adaptive scaling not available
 
             if hasattr(self.worker_context, "max_workers"):
                 max_workers = self.worker_context.max_workers
@@ -146,7 +168,7 @@ class UnifiedMetrics:
                     "total_processed": total_processed,
                     "total_failed": failed_count,
                     "active_workers": target_workers,  # Show target workers for scaling visibility
-                    "busy_workers": active_workers,    # Show actually busy workers
+                    "busy_workers": active_workers,  # Show actually busy workers
                     "max_workers": max_workers,
                     "queue_size": queue_size,
                     "queue_length": queue_size,  # Dashboard compatibility
@@ -185,13 +207,63 @@ class UnifiedMetrics:
         except Exception as e:
             print(f"Warning: Error collecting system resources: {e}")
 
+    def _collect_adaptive_scaling_data(self, metrics: dict):
+        """Collect adaptive scaling status and data"""
+        try:
+            from adaptive_scaling_engine import get_scaling_status
+
+            scaling_status = get_scaling_status()
+
+            # Extract relevant data for dashboard
+            metrics["scaling_status"] = (
+                "Active" if scaling_status.get("scaling_active", False) else "Inactive"
+            )
+            metrics["auto_tuning_active"] = scaling_status.get("scaling_active", False)
+
+            # Get recent scaling decisions
+            recent_decisions = scaling_status.get("recent_scaling_decisions", [])
+            if recent_decisions:
+                last_decision = recent_decisions[-1]
+                action = last_decision.get("action", "No action")
+                reason = last_decision.get("reason", "")
+                metrics["last_scaling_action"] = (
+                    f"{action}: {reason}" if reason else action
+                )
+            else:
+                metrics["last_scaling_action"] = "No recent actions"
+
+            # Pattern detection - simplified
+            decisions_count = scaling_status.get("scaling_decisions_made", 0)
+            if decisions_count > 5:
+                metrics["pattern_detected"] = "Performance tracking"
+            else:
+                metrics["pattern_detected"] = "Monitoring"
+
+            # Config updates
+            metrics["config_updates"] = decisions_count
+
+            # Set availability flag
+            metrics["has_adaptive_data"] = True
+
+        except Exception as e:
+            print(f"Warning: Error collecting adaptive scaling data: {e}")
+            # Set defaults
+            metrics["scaling_status"] = "Unknown"
+            metrics["auto_tuning_active"] = False
+            metrics["last_scaling_action"] = "Data unavailable"
+            metrics["pattern_detected"] = "Unknown"
+            metrics["config_updates"] = 0
+            metrics["has_adaptive_data"] = False
+
     def _calculate_derived_metrics(self, metrics: dict):
         """Calculate derived metrics consistently"""
 
         # Worker utilization (both formats) - busy workers vs target workers
         if metrics["active_workers"] > 0:  # active_workers is now target_workers
             # Calculate how busy the target workforce is
-            utilization_decimal = metrics.get("busy_workers", 0) / metrics["active_workers"]
+            utilization_decimal = (
+                metrics.get("busy_workers", 0) / metrics["active_workers"]
+            )
             utilization_decimal = min(1.0, utilization_decimal)  # Cap at 100%
             metrics["worker_utilization"] = (
                 utilization_decimal  # 0-1.0 for scaling engine
@@ -219,18 +291,50 @@ class UnifiedMetrics:
         else:
             metrics["performance_score"] = base_score
 
-        # Browser pool recommendation
-        metrics["browser_pool_recommendation"] = min(
-            6, max(1, metrics["max_workers"] // 17)
-        )
+        # Browser pool recommendation based on target workers
+        target_worker_count = metrics.get(
+            "active_workers", 50
+        )  # active_workers is now target_workers
+
+        # For 6-browser pool: recommend full capacity when >=85 workers (85/17 = 5 browsers minimum)
+        # This ensures we utilize the configured 6-browser pool efficiently
+        if target_worker_count >= 85:
+            recommended_browsers = 6  # Use full configured capacity
+        else:
+            recommended_browsers = min(6, max(1, target_worker_count // 17))
+
+        metrics["browser_pool_recommendation"] = recommended_browsers
 
         # Try to get current browser pool size
         try:
             from optimization_utils import _browser_pool
+            from config import OptimizationConfig
 
-            metrics["browser_pool_size"] = len(_browser_pool)
+            actual_pool_size = len(_browser_pool)
+            configured_pool_size = OptimizationConfig.BROWSER_POOL_SIZE
+
+            metrics["browser_pool_size"] = actual_pool_size
+
+            # Enhanced status information
+            if actual_pool_size == 0:
+                if target_worker_count > 0:
+                    # Show expected pool size when empty but workers are expected
+                    expected_size = max(1, target_worker_count // 17)
+                    metrics["browser_pool_status"] = f"Empty (expects {expected_size})"
+                else:
+                    metrics["browser_pool_status"] = (
+                        f"Empty (config: {configured_pool_size})"
+                    )
+            else:
+                metrics["browser_pool_status"] = (
+                    f"Active ({actual_pool_size}/{configured_pool_size})"
+                )
+
         except (ImportError, NameError, AttributeError):
-            metrics["browser_pool_size"] = max(1, metrics["max_workers"] // 17)
+            # Fallback: use target worker count for estimation
+            fallback_size = max(1, target_worker_count // 17)
+            metrics["browser_pool_size"] = 0  # Show 0 since we can't access actual pool
+            metrics["browser_pool_status"] = f"Estimated (expects {fallback_size})"
 
     def get_scaling_engine_format(self) -> dict:
         """Get metrics in the format expected by the scaling engine"""
@@ -252,8 +356,8 @@ class UnifiedMetrics:
         # Return all metrics but ensure dashboard-friendly formats
         dashboard_metrics = unified.copy()
         dashboard_metrics["worker_utilization"] = unified[
-            "worker_utilization_percent"
-        ]  # Use percentage for display
+            "worker_utilization"  # Use decimal form (0-1.0) for .1% formatting
+        ]  # Dashboard will convert with .1% format specifier
 
         return dashboard_metrics
 

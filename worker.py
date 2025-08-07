@@ -18,6 +18,7 @@ try:
         get_children_at_level_async,
     )
     from .logging_setup import log_worker_state, log_function_entry, log_function_exit
+    from .optimization_utils import create_optimized_browser
 
     # Advanced optimization utilities are reserved for future performance improvements
     ADVANCED_OPTIMIZATION_AVAILABLE = False
@@ -31,6 +32,7 @@ except ImportError:
     import data_structures
     import dom_utils
     import logging_setup
+    import optimization_utils
 
     MAX_RETRIES = ScraperConfig.MAX_RETRIES
     RETRY_DELAY_BASE = ScraperConfig.RETRY_DELAY_BASE
@@ -46,6 +48,7 @@ except ImportError:
     log_worker_state = logging_setup.log_worker_state
     log_function_entry = logging_setup.log_function_entry
     log_function_exit = logging_setup.log_function_exit
+    create_optimized_browser = optimization_utils.create_optimized_browser
     ADVANCED_OPTIMIZATION_AVAILABLE = False
 
     Task = data_structures.Task
@@ -232,7 +235,7 @@ async def process_task_with_semaphore(task, context, browser):
         return await process_task_async(task, context, browser)
 
 
-async def parallel_worker(context, browser, worker_id):
+async def parallel_worker(context, playwright, worker_id):
     """
     Concurrent worker that processes tasks from the queue with robust error handling.
 
@@ -244,7 +247,7 @@ async def parallel_worker(context, browser, worker_id):
 
     Args:
         context: Shared worker context for coordination
-        browser: Playwright browser instance
+        playwright: Playwright instance for getting browsers from pool
         worker_id: Unique identifier for this worker
     """
     logger = context.logger
@@ -318,6 +321,19 @@ async def parallel_worker(context, browser, worker_id):
                     "processing_task",
                     task_id=task.worker_id,
                 )
+
+                # Get browser from pool for this task
+                browser = await create_optimized_browser(
+                    playwright, reuse_existing=True
+                )
+                if not browser:
+                    logger.error(
+                        f"[Worker-{worker_id}] Failed to get browser from pool"
+                    )
+                    await context.mark_task_failed(
+                        task.worker_id, Exception("Failed to get browser")
+                    )
+                    continue
 
                 # Process the task with semaphore control
                 result = await process_task_with_semaphore(task, context, browser)
@@ -397,13 +413,13 @@ async def parallel_worker(context, browser, worker_id):
         )
 
 
-async def create_workers(context, browser, num_workers):
+async def create_workers(context, playwright, num_workers):
     """
     Create and start the specified number of workers.
 
     Args:
         context: Shared worker context
-        browser: Playwright browser instance
+        playwright: Playwright instance for browser pool access
         num_workers: Number of workers to create
 
     Returns:
@@ -416,7 +432,7 @@ async def create_workers(context, browser, num_workers):
 
     for i in range(num_workers):
         worker_task = asyncio.create_task(
-            parallel_worker(context, browser, i + 1), name=f"worker-{i + 1}"
+            parallel_worker(context, playwright, i + 1), name=f"worker-{i + 1}"
         )
         workers.append(worker_task)
 

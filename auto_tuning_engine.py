@@ -27,8 +27,8 @@ class TuningParameters:
     max_workers: int = 100
     scale_up_threshold: float = 0.90  # More aggressive scaling up
     scale_down_threshold: float = 0.80  # Conservative scaling down
-    scale_up_increment: int = 5  # Scale up faster
-    scale_down_increment: int = 2  # Scale down more conservatively
+    scale_up_increment: int = 10  # Scale up faster (+10)
+    scale_down_increment: int = 5  # Scale down more conservatively (-5)
 
     # Performance thresholds
     max_response_time_ms: float = 10000.0

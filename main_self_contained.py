@@ -11,7 +11,7 @@ PROACTIVE SCALING OPTIMIZATIONS:
 3. Memory management with aggressive cleanup
 4. Enhanced monitoring and statistics
 5. Proactive scaling: 20-100 workers starting at 50
-6. Aggressive scale-up (+5), conservative scale-down (-2)
+6. Aggressive scale-up (+10), conservative scale-down (-5)
 7. Real-time dashboard with complete metrics
 
 EXPECTED PERFORMANCE IMPROVEMENTS:
@@ -33,10 +33,11 @@ import sys
 
 # Import self-contained configuration and optimization
 try:
-    from config import config, ScraperConfig
+    from config import config, ScraperConfig, OptimizationConfig
     from optimization_utils import (
         get_optimization_metrics,
         cleanup_optimization_resources,
+        create_optimized_browser,
     )
 
     # Import adaptive scaling components with FIXED scaling engine
@@ -126,7 +127,7 @@ def update_worker_count(new_count: int, reason: str = "Adaptive scaling") -> Non
 
 
 async def scale_workers_to_target(
-    target_count: int, current_tasks: list, worker_context, browser
+    target_count: int, current_tasks: list, worker_context, playwright
 ) -> list:
     """Dynamically create or destroy worker tasks to match target count."""
     # Count current worker tasks (exclude monitor and progress tasks)
@@ -144,7 +145,7 @@ async def scale_workers_to_target(
             try:
                 worker_id = i  # parallel_worker expects int worker_id
                 task = asyncio.create_task(
-                    parallel_worker(worker_context, browser, worker_id),
+                    parallel_worker(worker_context, playwright, worker_id),
                     name=f"worker-{worker_id}",
                 )
                 current_tasks.append(task)
@@ -195,7 +196,7 @@ def initialize_adaptive_scaling() -> None:
 
 
 async def perform_adaptive_scaling_check(
-    tasks=None, worker_context=None, browser=None
+    tasks=None, worker_context=None, playwright=None
 ) -> None:
     """Perform adaptive scaling check using the FIXED scaling engine."""
     global _last_scaling_time
@@ -268,17 +269,38 @@ async def perform_adaptive_scaling_check(
 
         # Apply the scaling decision from the FIXED engine
         if scaling_decision.get("action") == "scale_up":
-            target_workers = scaling_decision.get("target_workers", current_workers + 5)
+            # Get dynamic scaling increment from config (no hardcoded fallback)
+            dynamic_config = get_dynamic_config()
+            scale_increment = dynamic_config.get("worker_scale_increment", 10)
+            target_workers = scaling_decision.get(
+                "target_workers", current_workers + scale_increment
+            )
+
+            # DIAGNOSTIC: Log when fallback is used
+            if "target_workers" not in scaling_decision:
+                print(
+                    f"⚠️  FALLBACK TRIGGERED: scaling_decision missing 'target_workers', "
+                    f"using config fallback (+{scale_increment})"
+                )
+                print(f"⚠️  scaling_decision contents: {scaling_decision}")
+            else:
+                print(
+                    f"✅ Using scaling engine target_workers: {scaling_decision['target_workers']}"
+                )
             update_worker_count(
                 target_workers,
                 f"FIXED engine scale-up: {scaling_decision.get('reasoning', 'High performance')}",
             )
 
             # CRITICAL: Actually scale the workers if we have the required parameters
-            if tasks is not None and worker_context is not None and browser is not None:
+            if (
+                tasks is not None
+                and worker_context is not None
+                and playwright is not None
+            ):
                 try:
                     tasks[:] = await scale_workers_to_target(
-                        target_workers, tasks, worker_context, browser
+                        target_workers, tasks, worker_context, playwright
                     )
                     print(
                         f"🔧 SCALING APPLIED: Tasks list now has {len(tasks)} total tasks"
@@ -293,17 +315,38 @@ async def perform_adaptive_scaling_check(
             _last_scaling_time = current_time
 
         elif scaling_decision.get("action") == "scale_down":
-            target_workers = scaling_decision.get("target_workers", current_workers - 2)
+            # Get dynamic scaling decrement from config (no hardcoded fallback)
+            dynamic_config = get_dynamic_config()
+            scale_decrement = dynamic_config.get("worker_scale_decrement", 5)
+            target_workers = scaling_decision.get(
+                "target_workers", current_workers - scale_decrement
+            )
+
+            # DIAGNOSTIC: Log when fallback is used
+            if "target_workers" not in scaling_decision:
+                print(
+                    f"⚠️  FALLBACK TRIGGERED: scaling_decision missing 'target_workers', "
+                    f"using config fallback (-{scale_decrement})"
+                )
+                print(f"⚠️  scaling_decision contents: {scaling_decision}")
+            else:
+                print(
+                    f"✅ Using scaling engine target_workers: {scaling_decision['target_workers']}"
+                )
             update_worker_count(
                 target_workers,
                 f"FIXED engine scale-down: {scaling_decision.get('reasoning', 'Poor performance')}",
             )
 
             # CRITICAL: Actually scale the workers if we have the required parameters
-            if tasks is not None and worker_context is not None and browser is not None:
+            if (
+                tasks is not None
+                and worker_context is not None
+                and playwright is not None
+            ):
                 try:
                     tasks[:] = await scale_workers_to_target(
-                        target_workers, tasks, worker_context, browser
+                        target_workers, tasks, worker_context, playwright
                     )
                     print(
                         f"🔧 SCALING APPLIED: Tasks list now has {len(tasks)} total tasks"
@@ -513,13 +556,44 @@ async def main():
 
     try:
         async with async_playwright() as playwright:
-            manager.logger.info("Initializing browser and systems...")
+            manager.logger.info("Initializing browser pool and systems...")
 
-            # Create basic browser
-            browser = await playwright.chromium.launch(headless=BROWSER_HEADLESS)
+            # Initialize browser pool for optimized parallel processing
+            from optimization_utils import create_optimized_browser
+
+            # Create browser pool based on configuration
+            browser_pool_size = OptimizationConfig.BROWSER_POOL_SIZE
+            manager.logger.info(
+                f"Initializing browser pool with {browser_pool_size} browsers..."
+            )
+
+            browser_pool = []
+            for i in range(browser_pool_size):
+                browser = await create_optimized_browser(
+                    playwright, reuse_existing=False
+                )
+                if browser:
+                    browser_pool.append(browser)
+                    manager.logger.debug(f"Created browser {i+1}/{browser_pool_size}")
+                else:
+                    manager.logger.error(
+                        f"Failed to create browser {i+1}, stopping pool initialization"
+                    )
+                    break
+
+            manager.logger.info(
+                f"Browser pool initialized with {len(browser_pool)} browsers"
+            )
+
+            # Use first browser from pool for initial page setup
+            if not browser_pool:
+                manager.logger.error("Failed to create any browsers in pool")
+                return
+
+            initial_browser = browser_pool[0]
 
             # Initial page to get tasks
-            page = await browser.new_page()
+            page = await initial_browser.new_page()
             await page.goto(START_URL)
 
             # Find root node and get initial tasks
@@ -603,7 +677,7 @@ async def main():
                 for i in range(max_workers):
                     worker_id = i  # parallel_worker expects int worker_id
                     task = asyncio.create_task(
-                        parallel_worker(worker_context, browser, worker_id)
+                        parallel_worker(worker_context, playwright, worker_id)
                     )
                     tasks.append(task)
                 manager.logger.info(
@@ -623,7 +697,7 @@ async def main():
                 manager.logger.info("Creating progress monitoring task...")
                 progress_task = asyncio.create_task(
                     monitor_progress_and_scaling(
-                        manager, stop_event, tasks, worker_context, browser
+                        manager, stop_event, tasks, worker_context, playwright
                     )
                 )
                 tasks.append(progress_task)
@@ -699,7 +773,7 @@ async def main():
 
 
 async def monitor_progress_and_scaling(
-    manager, stop_event, worker_tasks, worker_context, browser
+    manager, stop_event, worker_tasks, worker_context, playwright
 ):
     """Monitor progress and perform FIXED adaptive scaling checks."""
     last_report = time.time()
@@ -719,7 +793,7 @@ async def monitor_progress_and_scaling(
                 >= ScraperConfig.ADAPTIVE_SCALING_INTERVAL
             ):
                 await perform_adaptive_scaling_check(
-                    worker_tasks, worker_context, browser
+                    worker_tasks, worker_context, playwright
                 )
                 manager.last_performance_check = current_time
 
