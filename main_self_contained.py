@@ -55,7 +55,7 @@ try:
     from dom_utils import find_objectarx_root_node, get_level1_folders
 
     # Import real-time monitoring dashboard
-    from real_time_monitor import start_real_time_monitor, stop_real_time_monitor
+    from dashboard_controller import DashboardController
 
     OPTIMIZATIONS_AVAILABLE = True
     print(
@@ -553,7 +553,7 @@ async def main():
     tasks = []
     stop_event = asyncio.Event()
     worker_context = None
-    monitor_task = None
+    dashboard_controller = None
 
     try:
         async with async_playwright() as playwright:
@@ -644,30 +644,33 @@ async def main():
                 "   Starting with %s workers using FIXED scaling engine", max_workers
             )
 
-            # Start real-time monitoring dashboard
+            # Start dashboard using DashboardController
             if worker_context:
                 try:
-                    manager.logger.info(
-                        "Starting real-time monitoring dashboard with FIXED metrics..."
-                    )
-                    # Start monitoring with correct parameters and run the dashboard
-                    monitor_instance = start_real_time_monitor(
-                        ScraperConfig.DASHBOARD_UPDATE_INTERVAL, worker_context
-                    )
-                    # Start the dashboard task in background
-                    dashboard_task = asyncio.create_task(
-                        monitor_instance.run_dashboard(), name="dashboard"
-                    )
-                    tasks.append(dashboard_task)
-                    manager.logger.info(
-                        "Real-time monitoring dashboard created successfully"
-                    )
-                    print(
-                        f"🖥️ DASHBOARD: Task created with update interval {ScraperConfig.DASHBOARD_UPDATE_INTERVAL} seconds"
-                    )
+                    manager.logger.info("Initializing dashboard controller...")
+
+                    # Create and start dashboard controller
+                    dashboard_controller = DashboardController(ScraperConfig)
+                    await dashboard_controller.start_dashboard(worker_context)
+
+                    if dashboard_controller.is_running():
+                        manager.logger.info("Dashboard controller started successfully")
+                        print(
+                            f"🖥️ DASHBOARD: Controller started with update interval "
+                            f"{ScraperConfig.DASHBOARD_UPDATE_INTERVAL} seconds"
+                        )
+                        print(
+                            f"🖥️ DASHBOARD: Status - Enabled: {ScraperConfig.ENABLE_DASHBOARD}"
+                        )
+                    else:
+                        manager.logger.info(
+                            "Dashboard controller initialized but dashboard disabled via configuration"
+                        )
+                        print("🖥️ DASHBOARD: Disabled via configuration")
+
                 except Exception as e:
                     manager.logger.error(
-                        "Failed to create real-time monitoring dashboard: %s",
+                        "Failed to initialize dashboard controller: %s",
                         e,
                         exc_info=True,
                     )
@@ -755,12 +758,14 @@ async def main():
         except Exception as e:
             manager.logger.warning(f"Error during browser cleanup: {e}")
 
-        # Stop monitoring
-        if "_monitor_instance" in locals():
+        # Stop dashboard controller
+        if dashboard_controller:
             try:
-                stop_real_time_monitor()
+                dashboard_controller.stop_dashboard()
+                await dashboard_controller.wait_for_completion()
+                manager.logger.info("Dashboard controller stopped successfully")
             except Exception as e:
-                manager.logger.warning(f"Error stopping monitor: {e}")
+                manager.logger.warning(f"Error stopping dashboard controller: {e}")
 
         # Final metrics
         metrics = manager.get_metrics()

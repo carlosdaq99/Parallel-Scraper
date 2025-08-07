@@ -190,6 +190,13 @@ class ScraperConfig:
     REAL_TIME_MONITOR_INTERVAL = int(os.getenv("SCRAPER_MONITOR_INTERVAL", "10"))
     """Update interval for the real-time monitor, in seconds."""
 
+    # ============================================================================
+    # DASHBOARD CONTROL (Phase 1 Implementation)
+    # Controls the dashboard display behavior for terminal output separation.
+    # ============================================================================
+    ENABLE_DASHBOARD = os.getenv("SCRAPER_ENABLE_DASHBOARD", "true").lower() == "true"
+    """Whether to enable the dashboard display in background."""
+
 
 class OptimizationConfig:
     """Configuration settings for the optimization framework."""
