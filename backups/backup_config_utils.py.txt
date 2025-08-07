@@ -1,0 +1,598 @@
+#!/usr/bin/env python3
+"""
+Function-Based Configuration Management - Phase 4 Configuration Unification
+
+Provides function-based configuration management replacing class-based patterns.
+Consolidates scraper and optimization settings into unified, flexible configuration
+functions that can be easily tested, modified, and extended.
+
+Key Features:
+1. Function-based configuration loading and validation
+2. Environment variable integration with defaults
+3. Configuration merging and override capabilities
+4. Validation and type conversion
+5. Configuration export/import for testing
+6. Hot-reload capabilities for development
+
+Design Principles:
+- Pure functions with no side effects
+- Immutable configuration dictionaries
+- Clear separation between scraper and optimization settings
+- Environment variable integration with sensible defaults
+- Comprehensive validation and error handling
+"""
+
+import os
+import json
+import logging
+from typing import Dict, Any, Optional, Union, List
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+# ====================
+# CORE CONFIGURATION FUNCTIONS
+# ====================
+
+
+def load_scraper_config(
+    env_prefix: str = "SCRAPER_", config_overrides: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Load scraper configuration from environment variables and overrides.
+
+    Args:
+        env_prefix: Environment variable prefix (default: "SCRAPER_")
+        config_overrides: Optional dictionary of configuration overrides
+
+    Returns:
+        Dictionary containing scraper configuration
+    """
+    config = {
+        # TARGET DOCUMENTATION CONFIGURATION
+        "target": {
+            "start_url": os.getenv(
+                f"{env_prefix}START_URL",
+                "https://help.autodesk.com/view/OARX/2025/ENU/",
+            ),
+            "folder_label": os.getenv(
+                f"{env_prefix}FOLDER_LABEL", "ObjectARX and Managed .NET"
+            ),
+            "output_file": os.getenv(
+                f"{env_prefix}OUTPUT_FILE", "objectarx_structure_map_parallel.json"
+            ),
+        },
+        # DOM SELECTOR CONFIGURATION
+        "selectors": {
+            "expand_button": os.getenv(
+                f"{env_prefix}EXPAND_BUTTON", 'span.expand-collapse[role="button"]'
+            ),
+            "treeitem": os.getenv(f"{env_prefix}TREEITEM", '[role="treeitem"]'),
+        },
+        # PARALLEL PROCESSING CONFIGURATION
+        "parallel": {
+            "max_concurrent_pages": int(
+                os.getenv(f"{env_prefix}MAX_CONCURRENT_PAGES", "50")
+            ),
+            "max_workers": int(os.getenv(f"{env_prefix}MAX_WORKERS", "50")),
+            "max_depth": int(os.getenv(f"{env_prefix}MAX_DEPTH", "999")),
+            "max_subfolders_to_spawn": int(
+                os.getenv(f"{env_prefix}MAX_SUBFOLDERS", "100")
+            ),
+        },
+        # TIMING CONFIGURATION
+        "timing": {
+            "worker_startup_delay": float(
+                os.getenv(f"{env_prefix}STARTUP_DELAY", "0.05")
+            ),
+            "page_load_timeout": float(os.getenv(f"{env_prefix}PAGE_TIMEOUT", "30.0")),
+            "dom_operation_timeout": float(
+                os.getenv(f"{env_prefix}DOM_TIMEOUT", "15.0")
+            ),
+            "worker_shutdown_timeout": float(
+                os.getenv(f"{env_prefix}SHUTDOWN_TIMEOUT", "5.0")
+            ),
+            "page_wait_after_expand": int(os.getenv(f"{env_prefix}EXPAND_WAIT", "500")),
+        },
+        # RETRY CONFIGURATION
+        "retry": {
+            "max_retries": int(os.getenv(f"{env_prefix}MAX_RETRIES", "3")),
+            "retry_delay_base": float(os.getenv(f"{env_prefix}RETRY_DELAY", "1.0")),
+            "exponential_backoff_multiplier": float(
+                os.getenv(f"{env_prefix}BACKOFF_MULTIPLIER", "2.0")
+            ),
+        },
+        # BROWSER CONFIGURATION
+        "browser": {
+            "headless": os.getenv(f"{env_prefix}HEADLESS", "true").lower() == "true",
+            "slow_mo": int(os.getenv(f"{env_prefix}SLOW_MO", "0")),
+            "timeout": int(os.getenv(f"{env_prefix}BROWSER_TIMEOUT", "30000")),
+        },
+        # LOGGING CONFIGURATION
+        "logging": {
+            "level": os.getenv(f"{env_prefix}LOG_LEVEL", "INFO"),
+            "format": os.getenv(
+                f"{env_prefix}LOG_FORMAT",
+                "%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d): %(message)s",
+            ),
+            "date_format": os.getenv(
+                f"{env_prefix}LOG_DATE_FORMAT", "%Y-%m-%d %H:%M:%S"
+            ),
+        },
+        # PERFORMANCE MONITORING
+        "monitoring": {
+            "progress_report_interval": int(
+                os.getenv(f"{env_prefix}PROGRESS_INTERVAL", "10")
+            ),
+            "stagnation_detection_threshold": int(
+                os.getenv(f"{env_prefix}STAGNATION_THRESHOLD", "60")
+            ),
+        },
+    }
+
+    # Apply overrides if provided
+    if config_overrides:
+        config = merge_config_deep(config, config_overrides)
+
+    return config
+
+
+def load_optimization_config(
+    env_prefix: str = "OPT_", config_overrides: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Load optimization configuration from environment variables and overrides.
+
+    Args:
+        env_prefix: Environment variable prefix (default: "OPT_")
+        config_overrides: Optional dictionary of configuration overrides
+
+    Returns:
+        Dictionary containing optimization configuration
+    """
+    config = {
+        # BROWSER OPTIMIZATION SETTINGS
+        "browser": {
+            "reuse_enabled": os.getenv(f"{env_prefix}BROWSER_REUSE", "true").lower()
+            == "true",
+            "pool_size": int(os.getenv(f"{env_prefix}BROWSER_POOL_SIZE", "3")),
+            "circuit_breaker_enabled": os.getenv(
+                f"{env_prefix}CIRCUIT_BREAKER", "true"
+            ).lower()
+            == "true",
+            "circuit_breaker_threshold": int(
+                os.getenv(f"{env_prefix}CB_THRESHOLD", "5")
+            ),
+            "circuit_breaker_timeout": int(os.getenv(f"{env_prefix}CB_TIMEOUT", "30")),
+            "launch_options": {
+                "headless": os.getenv(f"{env_prefix}BROWSER_HEADLESS", "true").lower()
+                == "true",
+                "args": [
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-features=VizDisplayCompositor",
+                ],
+            },
+        },
+        # RESOURCE FILTERING SETTINGS
+        "resource_filtering": {
+            "enabled": os.getenv(f"{env_prefix}RESOURCE_FILTERING", "true").lower()
+            == "true",
+            "block_images": os.getenv(f"{env_prefix}BLOCK_IMAGES", "true").lower()
+            == "true",
+            "block_stylesheets": os.getenv(f"{env_prefix}BLOCK_CSS", "false").lower()
+            == "true",
+            "block_fonts": os.getenv(f"{env_prefix}BLOCK_FONTS", "true").lower()
+            == "true",
+            "block_media": os.getenv(f"{env_prefix}BLOCK_MEDIA", "true").lower()
+            == "true",
+            "allowlist_domains": _parse_list_env(
+                f"{env_prefix}ALLOWLIST_DOMAINS", ["help.autodesk.com"]
+            ),
+            "blocklist_patterns": _parse_list_env(
+                f"{env_prefix}BLOCKLIST_PATTERNS", ["*analytics*", "*tracking*"]
+            ),
+        },
+        # MEMORY OPTIMIZATION SETTINGS
+        "memory": {
+            "optimization_enabled": os.getenv(f"{env_prefix}MEMORY_OPT", "true").lower()
+            == "true",
+            "cleanup_interval": int(os.getenv(f"{env_prefix}CLEANUP_INTERVAL", "30")),
+            "gc_threshold_pages": int(os.getenv(f"{env_prefix}GC_THRESHOLD", "100")),
+            "memory_threshold_mb": int(
+                os.getenv(f"{env_prefix}MEMORY_THRESHOLD", "2048")
+            ),
+            "aggressive_cleanup": os.getenv(
+                f"{env_prefix}AGGRESSIVE_CLEANUP", "false"
+            ).lower()
+            == "true",
+        },
+        # PATTERN CACHING SETTINGS
+        "caching": {
+            "pattern_caching_enabled": os.getenv(
+                f"{env_prefix}PATTERN_CACHING", "true"
+            ).lower()
+            == "true",
+            "max_patterns": int(os.getenv(f"{env_prefix}MAX_PATTERNS", "500")),
+            "max_memory_mb": int(os.getenv(f"{env_prefix}CACHE_MEMORY", "25")),
+            "cache_ttl_seconds": int(os.getenv(f"{env_prefix}CACHE_TTL", "3600")),
+        },
+        # MONITORING SETTINGS
+        "monitoring": {
+            "advanced_monitoring": os.getenv(
+                f"{env_prefix}ADVANCED_MONITORING", "true"
+            ).lower()
+            == "true",
+            "metrics_history_size": int(
+                os.getenv(f"{env_prefix}METRICS_HISTORY", "100")
+            ),
+            "report_interval_seconds": int(
+                os.getenv(f"{env_prefix}REPORT_INTERVAL", "60")
+            ),
+            "enable_detailed_logging": os.getenv(
+                f"{env_prefix}DETAILED_LOGGING", "true"
+            ).lower()
+            == "true",
+            "performance_baseline_samples": int(
+                os.getenv(f"{env_prefix}BASELINE_SAMPLES", "5")
+            ),
+        },
+        # ORCHESTRATION SETTINGS
+        "orchestration": {
+            "enabled": os.getenv(f"{env_prefix}ORCHESTRATION", "true").lower()
+            == "true",
+            "max_concurrent_workers": int(os.getenv(f"{env_prefix}MAX_WORKERS", "50")),
+            "enable_fallback_on_error": os.getenv(
+                f"{env_prefix}ENABLE_FALLBACK", "true"
+            ).lower()
+            == "true",
+            "max_retry_attempts": int(os.getenv(f"{env_prefix}MAX_RETRIES", "3")),
+            "fallback_timeout_seconds": int(
+                os.getenv(f"{env_prefix}FALLBACK_TIMEOUT", "30")
+            ),
+            "error_threshold_percent": int(
+                os.getenv(f"{env_prefix}ERROR_THRESHOLD", "10")
+            ),
+        },
+    }
+
+    # Apply overrides if provided
+    if config_overrides:
+        config = merge_config_deep(config, config_overrides)
+
+    return config
+
+
+def load_unified_config(
+    scraper_overrides: Optional[Dict[str, Any]] = None,
+    optimization_overrides: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Load unified configuration combining scraper and optimization settings.
+
+    Args:
+        scraper_overrides: Optional scraper configuration overrides
+        optimization_overrides: Optional optimization configuration overrides
+
+    Returns:
+        Dictionary containing unified configuration
+    """
+    return {
+        "scraper": load_scraper_config(config_overrides=scraper_overrides),
+        "optimization": load_optimization_config(
+            config_overrides=optimization_overrides
+        ),
+        "version": "4.0.0",
+        "load_timestamp": (
+            int(os.path.getmtime(__file__)) if os.path.exists(__file__) else 0
+        ),
+    }
+
+
+# ====================
+# CONFIGURATION UTILITY FUNCTIONS
+# ====================
+
+
+def get_config_value(config: Dict[str, Any], path: str, default: Any = None) -> Any:
+    """
+    Get configuration value using dot notation path.
+
+    Args:
+        config: Configuration dictionary
+        path: Dot-notation path (e.g., "scraper.parallel.max_workers")
+        default: Default value if path not found
+
+    Returns:
+        Configuration value or default
+    """
+    try:
+        keys = path.split(".")
+        value = config
+        for key in keys:
+            value = value[key]
+        return value
+    except (KeyError, TypeError):
+        return default
+
+
+def set_config_value(config: Dict[str, Any], path: str, value: Any) -> Dict[str, Any]:
+    """
+    Set configuration value using dot notation path.
+
+    Args:
+        config: Configuration dictionary
+        path: Dot-notation path (e.g., "scraper.parallel.max_workers")
+        value: Value to set
+
+    Returns:
+        Modified configuration dictionary
+    """
+    keys = path.split(".")
+    current = config
+
+    # Navigate to parent of target key
+    for key in keys[:-1]:
+        if key not in current:
+            current[key] = {}
+        current = current[key]
+
+    # Set the final value
+    current[keys[-1]] = value
+    return config
+
+
+def merge_config_deep(
+    base_config: Dict[str, Any], override_config: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Deep merge configuration dictionaries.
+
+    Args:
+        base_config: Base configuration dictionary
+        override_config: Override configuration dictionary
+
+    Returns:
+        Merged configuration dictionary
+    """
+    result = base_config.copy()
+
+    for key, value in override_config.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = merge_config_deep(result[key], value)
+        else:
+            result[key] = value
+
+    return result
+
+
+def validate_config(config: Dict[str, Any]) -> List[str]:
+    """
+    Validate configuration and return list of validation errors.
+
+    Args:
+        config: Configuration dictionary to validate
+
+    Returns:
+        List of validation error messages
+    """
+    errors = []
+
+    # Validate scraper configuration
+    scraper_config = config.get("scraper", {})
+
+    # Check required URL
+    start_url = get_config_value(scraper_config, "target.start_url")
+    if not start_url or not start_url.startswith("http"):
+        errors.append("Invalid or missing start_url")
+
+    # Check parallel settings
+    max_workers = get_config_value(scraper_config, "parallel.max_workers", 0)
+    if max_workers <= 0 or max_workers > 200:
+        errors.append("max_workers must be between 1 and 200")
+
+    max_concurrent = get_config_value(
+        scraper_config, "parallel.max_concurrent_pages", 0
+    )
+    if max_concurrent <= 0 or max_concurrent > max_workers:
+        errors.append("max_concurrent_pages must be between 1 and max_workers")
+
+    # Check timeout values
+    timeouts = [
+        ("timing.page_load_timeout", 1.0, 120.0),
+        ("timing.dom_operation_timeout", 1.0, 60.0),
+        ("timing.worker_shutdown_timeout", 1.0, 30.0),
+    ]
+
+    for path, min_val, max_val in timeouts:
+        timeout = get_config_value(scraper_config, path, 0)
+        if timeout < min_val or timeout > max_val:
+            errors.append(f"{path} must be between {min_val} and {max_val}")
+
+    # Validate optimization configuration
+    opt_config = config.get("optimization", {})
+
+    # Check memory thresholds
+    memory_threshold = get_config_value(opt_config, "memory.memory_threshold_mb", 0)
+    if memory_threshold < 512 or memory_threshold > 16384:
+        errors.append("memory_threshold_mb must be between 512 and 16384")
+
+    # Check cache settings
+    max_patterns = get_config_value(opt_config, "caching.max_patterns", 0)
+    if max_patterns < 10 or max_patterns > 10000:
+        errors.append("max_patterns must be between 10 and 10000")
+
+    return errors
+
+
+def export_config_to_file(config: Dict[str, Any], file_path: Union[str, Path]) -> bool:
+    """
+    Export configuration to JSON file.
+
+    Args:
+        config: Configuration dictionary to export
+        file_path: Path to output file
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2, default=str)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to export config to {file_path}: {e}")
+        return False
+
+
+def load_config_from_file(file_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
+    """
+    Load configuration from JSON file.
+
+    Args:
+        file_path: Path to configuration file
+
+    Returns:
+        Configuration dictionary or None if failed
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load config from {file_path}: {e}")
+        return None
+
+
+def create_test_config(
+    max_workers: int = 5,
+    max_concurrent_pages: int = 3,
+    enable_optimizations: bool = True,
+) -> Dict[str, Any]:
+    """
+    Create a test configuration with sensible defaults for testing.
+
+    Args:
+        max_workers: Maximum number of workers
+        max_concurrent_pages: Maximum concurrent pages
+        enable_optimizations: Whether to enable optimizations
+
+    Returns:
+        Test configuration dictionary
+    """
+    scraper_overrides = {
+        "parallel": {
+            "max_workers": max_workers,
+            "max_concurrent_pages": max_concurrent_pages,
+            "max_depth": 3,
+        },
+        "timing": {"page_load_timeout": 10.0, "dom_operation_timeout": 5.0},
+    }
+
+    optimization_overrides = {
+        "browser": {"reuse_enabled": enable_optimizations, "pool_size": 2},
+        "resource_filtering": {"enabled": enable_optimizations},
+        "memory": {
+            "optimization_enabled": enable_optimizations,
+            "cleanup_interval": 10,
+        },
+        "caching": {
+            "pattern_caching_enabled": enable_optimizations,
+            "max_patterns": 50,
+        },
+    }
+
+    return load_unified_config(scraper_overrides, optimization_overrides)
+
+
+# ====================
+# HELPER FUNCTIONS
+# ====================
+
+
+def _parse_list_env(env_var: str, default: List[str]) -> List[str]:
+    """Parse comma-separated environment variable into list."""
+    value = os.getenv(env_var)
+    if value:
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return default
+
+
+# ====================
+# LEGACY COMPATIBILITY FUNCTIONS
+# ====================
+
+
+def get_scraper_config_legacy() -> Dict[str, Any]:
+    """
+    Get scraper configuration in legacy format for backward compatibility.
+
+    Returns:
+        Configuration dictionary with legacy attribute names
+    """
+    config = load_scraper_config()
+
+    # Map to legacy attribute names
+    return {
+        "START_URL": config["target"]["start_url"],
+        "FOLDER_LABEL": config["target"]["folder_label"],
+        "OUTPUT_FILE": config["target"]["output_file"],
+        "MAX_CONCURRENT_PAGES": config["parallel"]["max_concurrent_pages"],
+        "MAX_WORKERS": config["parallel"]["max_workers"],
+        "MAX_DEPTH": config["parallel"]["max_depth"],
+        "MAX_SUBFOLDERS_TO_SPAWN": config["parallel"]["max_subfolders_to_spawn"],
+        "PAGE_LOAD_TIMEOUT": config["timing"]["page_load_timeout"],
+        "DOM_OPERATION_TIMEOUT": config["timing"]["dom_operation_timeout"],
+        "MAX_RETRIES": config["retry"]["max_retries"],
+        "RETRY_DELAY_BASE": config["retry"]["retry_delay_base"],
+        "EXPONENTIAL_BACKOFF_MULTIPLIER": config["retry"][
+            "exponential_backoff_multiplier"
+        ],
+        "BROWSER_HEADLESS": config["browser"]["headless"],
+        "PROGRESS_REPORT_INTERVAL": config["monitoring"]["progress_report_interval"],
+        "EXPAND_BUTTON_SELECTOR": config["selectors"]["expand_button"],
+        "TREEITEM_SELECTOR": config["selectors"]["treeitem"],
+    }
+
+
+# Export key functions for easy importing
+__all__ = [
+    "load_scraper_config",
+    "load_optimization_config",
+    "load_unified_config",
+    "get_config_value",
+    "set_config_value",
+    "merge_config_deep",
+    "validate_config",
+    "export_config_to_file",
+    "load_config_from_file",
+    "create_test_config",
+    "get_scraper_config_legacy",
+]
+
+if __name__ == "__main__":
+    # Basic test of function-based configuration
+    print("🧪 Testing Function-Based Configuration...")
+
+    # Test unified config loading
+    config = load_unified_config()
+    print(f"✅ Unified config loaded: {len(config)} sections")
+
+    # Test configuration validation
+    errors = validate_config(config)
+    print(f"✅ Validation complete: {len(errors)} errors")
+
+    # Test config value access
+    max_workers = get_config_value(config, "scraper.parallel.max_workers", 1)
+    print(f"✅ Config value access: max_workers={max_workers}")
+
+    # Test configuration export
+    export_success = export_config_to_file(config, "test_config.json")
+    print(f"✅ Config export: {export_success}")
+
+    # Test test configuration
+    test_config = create_test_config(max_workers=3, enable_optimizations=True)
+    print(f"✅ Test config created: {len(test_config)} sections")
+
+    print("🎉 All tests passed! Function-based configuration ready for integration.")

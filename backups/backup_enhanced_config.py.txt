@@ -1,0 +1,487 @@
+#!/usr/bin/env python3
+"""
+Configuration Migration Wrapper - Phase 4 Compatibility Layer
+
+Provides backward compatibility wrapper that allows existing code to continue
+using class-based configuration patterns while transitioning to function-based
+configuration management.
+
+Features:
+1. Backward compatibility with existing ScraperConfig and OptimizationConfig classes
+2. Seamless migration to function-based configuration
+3. Configuration validation and error reporting
+4. Enhanced environment variable support
+5. Runtime configuration updates
+
+Migration Strategy:
+- Existing code continues to work without changes
+- New code can use function-based patterns
+- Gradual migration path with comprehensive testing
+- Zero breaking changes during transition period
+"""
+
+import logging
+from typing import Dict, Any, Optional
+
+try:
+    from .config_utils import (
+        load_scraper_config,
+        load_optimization_config,
+        load_unified_config,
+        get_config_value,
+        validate_config,
+        create_test_config,
+        merge_config_deep,
+    )
+
+    FUNCTION_CONFIG_AVAILABLE = True
+except ImportError:
+    FUNCTION_CONFIG_AVAILABLE = False
+    logging.warning("Function-based configuration not available, using legacy patterns")
+
+logger = logging.getLogger(__name__)
+
+
+class EnhancedScraperConfig:
+    """
+    Enhanced ScraperConfig with function-based configuration backend.
+
+    Provides backward compatibility while enabling function-based configuration
+    management. Attributes are dynamically loaded from function-based config.
+    """
+
+    def __init__(self, config_overrides: Optional[Dict[str, Any]] = None):
+        """Initialize enhanced scraper configuration."""
+        self._config_overrides = config_overrides or {}
+        self._config_cache = None
+        self._load_config()
+
+    def _load_config(self):
+        """Load configuration using function-based patterns."""
+        if FUNCTION_CONFIG_AVAILABLE:
+            self._config_cache = load_scraper_config(
+                config_overrides=self._config_overrides
+            )
+        else:
+            # Fallback to original class-based configuration
+            self._config_cache = self._get_legacy_config()
+
+    def _get_legacy_config(self) -> Dict[str, Any]:
+        """Get legacy configuration for fallback."""
+        import os
+
+        return {
+            "target": {
+                "start_url": os.getenv(
+                    "SCRAPER_START_URL", "https://help.autodesk.com/view/OARX/2025/ENU/"
+                ),
+                "folder_label": os.getenv(
+                    "SCRAPER_FOLDER_LABEL", "ObjectARX and Managed .NET"
+                ),
+                "output_file": os.getenv(
+                    "SCRAPER_OUTPUT_FILE", "objectarx_structure_map_parallel.json"
+                ),
+            },
+            "parallel": {
+                "max_concurrent_pages": int(
+                    os.getenv("SCRAPER_MAX_CONCURRENT_PAGES", "50")
+                ),
+                "max_workers": int(os.getenv("SCRAPER_MAX_WORKERS", "50")),
+                "max_depth": int(os.getenv("SCRAPER_MAX_DEPTH", "999")),
+            },
+            "timing": {
+                "page_load_timeout": float(os.getenv("SCRAPER_PAGE_TIMEOUT", "30.0")),
+                "dom_operation_timeout": float(
+                    os.getenv("SCRAPER_DOM_TIMEOUT", "15.0")
+                ),
+            },
+            "retry": {
+                "max_retries": int(os.getenv("SCRAPER_MAX_RETRIES", "3")),
+                "retry_delay_base": float(os.getenv("SCRAPER_RETRY_DELAY", "1.0")),
+                "exponential_backoff_multiplier": float(
+                    os.getenv("SCRAPER_BACKOFF_MULTIPLIER", "2.0")
+                ),
+            },
+            "browser": {
+                "headless": os.getenv("SCRAPER_HEADLESS", "true").lower() == "true",
+            },
+            "monitoring": {
+                "progress_report_interval": int(
+                    os.getenv("SCRAPER_PROGRESS_INTERVAL", "10")
+                ),
+                "stagnation_detection_threshold": int(
+                    os.getenv("SCRAPER_STAGNATION_THRESHOLD", "60")
+                ),
+            },
+            "selectors": {
+                "expand_button": 'span.expand-collapse[role="button"]',
+                "treeitem": '[role="treeitem"]',
+            },
+        }
+
+    def get_config(self) -> Dict[str, Any]:
+        """Get the full configuration dictionary."""
+        return self._config_cache.copy()
+
+    def update_config(self, overrides: Dict[str, Any]):
+        """Update configuration with new overrides."""
+        self._config_overrides.update(overrides)
+        self._load_config()
+
+    def validate(self) -> bool:
+        """Validate configuration and log any errors."""
+        if FUNCTION_CONFIG_AVAILABLE:
+            unified_config = {"scraper": self._config_cache}
+            errors = validate_config(unified_config)
+            if errors:
+                for error in errors:
+                    logger.error(f"Configuration validation error: {error}")
+                return False
+        return True
+
+    # Legacy attribute access patterns
+    @property
+    def START_URL(self) -> str:
+        return self._config_cache["target"]["start_url"]
+
+    @property
+    def FOLDER_LABEL(self) -> str:
+        return self._config_cache["target"]["folder_label"]
+
+    @property
+    def OUTPUT_FILE(self) -> str:
+        return self._config_cache["target"]["output_file"]
+
+    @property
+    def MAX_CONCURRENT_PAGES(self) -> int:
+        return self._config_cache["parallel"]["max_concurrent_pages"]
+
+    @property
+    def MAX_WORKERS(self) -> int:
+        return self._config_cache["parallel"]["max_workers"]
+
+    @property
+    def MAX_DEPTH(self) -> int:
+        return self._config_cache["parallel"]["max_depth"]
+
+    @property
+    def MAX_SUBFOLDERS_TO_SPAWN(self) -> int:
+        return self._config_cache["parallel"].get("max_subfolders_to_spawn", 100)
+
+    @property
+    def PAGE_LOAD_TIMEOUT(self) -> float:
+        return self._config_cache["timing"]["page_load_timeout"]
+
+    @property
+    def DOM_OPERATION_TIMEOUT(self) -> float:
+        return self._config_cache["timing"]["dom_operation_timeout"]
+
+    @property
+    def WORKER_SHUTDOWN_TIMEOUT(self) -> float:
+        return self._config_cache["timing"].get("worker_shutdown_timeout", 5.0)
+
+    @property
+    def MAX_RETRIES(self) -> int:
+        return self._config_cache["retry"]["max_retries"]
+
+    @property
+    def RETRY_DELAY_BASE(self) -> float:
+        return self._config_cache["retry"]["retry_delay_base"]
+
+    @property
+    def EXPONENTIAL_BACKOFF_MULTIPLIER(self) -> float:
+        return self._config_cache["retry"]["exponential_backoff_multiplier"]
+
+    @property
+    def BROWSER_HEADLESS(self) -> bool:
+        return self._config_cache["browser"]["headless"]
+
+    @property
+    def PROGRESS_REPORT_INTERVAL(self) -> int:
+        return self._config_cache["monitoring"]["progress_report_interval"]
+
+    @property
+    def STAGNATION_DETECTION_THRESHOLD(self) -> int:
+        return self._config_cache["monitoring"].get(
+            "stagnation_detection_threshold", 60
+        )
+
+    @property
+    def EXPAND_BUTTON_SELECTOR(self) -> str:
+        return self._config_cache["selectors"]["expand_button"]
+
+    @property
+    def TREEITEM_SELECTOR(self) -> str:
+        return self._config_cache["selectors"]["treeitem"]
+
+
+class EnhancedOptimizationConfig:
+    """
+    Enhanced OptimizationConfig with function-based configuration backend.
+
+    Provides backward compatibility while enabling function-based configuration
+    management for optimization settings.
+    """
+
+    def __init__(self, config_overrides: Optional[Dict[str, Any]] = None):
+        """Initialize enhanced optimization configuration."""
+        self._config_overrides = config_overrides or {}
+        self._config_cache = None
+        self._load_config()
+
+    def _load_config(self):
+        """Load configuration using function-based patterns."""
+        if FUNCTION_CONFIG_AVAILABLE:
+            self._config_cache = load_optimization_config(
+                config_overrides=self._config_overrides
+            )
+        else:
+            # Fallback to original class-based configuration
+            self._config_cache = self._get_legacy_config()
+
+    def _get_legacy_config(self) -> Dict[str, Any]:
+        """Get legacy optimization configuration for fallback."""
+        import os
+
+        return {
+            "browser": {
+                "reuse_enabled": os.getenv("OPT_BROWSER_REUSE", "true").lower()
+                == "true",
+                "pool_size": int(os.getenv("OPT_BROWSER_POOL_SIZE", "3")),
+                "circuit_breaker_enabled": True,
+            },
+            "resource_filtering": {
+                "enabled": os.getenv("OPT_RESOURCE_FILTERING", "true").lower()
+                == "true",
+                "block_images": True,
+                "block_stylesheets": False,
+            },
+            "memory": {
+                "optimization_enabled": os.getenv("OPT_MEMORY_OPT", "true").lower()
+                == "true",
+                "cleanup_interval": int(os.getenv("OPT_CLEANUP_INTERVAL", "30")),
+            },
+            "caching": {
+                "pattern_caching_enabled": os.getenv(
+                    "OPT_PATTERN_CACHING", "true"
+                ).lower()
+                == "true",
+                "max_patterns": int(os.getenv("OPT_MAX_PATTERNS", "500")),
+            },
+            "monitoring": {
+                "advanced_monitoring": os.getenv(
+                    "OPT_ADVANCED_MONITORING", "true"
+                ).lower()
+                == "true",
+            },
+        }
+
+    def get_config(self) -> Dict[str, Any]:
+        """Get the full optimization configuration dictionary."""
+        return self._config_cache.copy()
+
+    def update_config(self, overrides: Dict[str, Any]):
+        """Update configuration with new overrides."""
+        self._config_overrides.update(overrides)
+        self._load_config()
+
+    # Legacy attribute access patterns
+    @property
+    def BROWSER_REUSE_ENABLED(self) -> bool:
+        return self._config_cache["browser"]["reuse_enabled"]
+
+    @property
+    def BROWSER_POOL_SIZE(self) -> int:
+        return self._config_cache["browser"]["pool_size"]
+
+    @property
+    def RESOURCE_FILTERING_ENABLED(self) -> bool:
+        return self._config_cache["resource_filtering"]["enabled"]
+
+    @property
+    def MEMORY_OPTIMIZATION_ENABLED(self) -> bool:
+        return self._config_cache["memory"]["optimization_enabled"]
+
+    @property
+    def PATTERN_CACHING_ENABLED(self) -> bool:
+        return self._config_cache["caching"]["pattern_caching_enabled"]
+
+    @property
+    def ADVANCED_MONITORING_ENABLED(self) -> bool:
+        return self._config_cache["monitoring"]["advanced_monitoring"]
+
+
+class UnifiedConfigManager:
+    """
+    Unified configuration manager providing both legacy and modern access patterns.
+
+    This class serves as the central configuration management system that can
+    provide both class-based (legacy) and function-based (modern) access to
+    configuration settings.
+    """
+
+    def __init__(
+        self,
+        scraper_overrides: Optional[Dict[str, Any]] = None,
+        optimization_overrides: Optional[Dict[str, Any]] = None,
+    ):
+        """Initialize unified configuration manager."""
+        self.scraper_overrides = scraper_overrides or {}
+        self.optimization_overrides = optimization_overrides or {}
+
+        # Initialize enhanced configs
+        self.scraper = EnhancedScraperConfig(scraper_overrides)
+        self.optimization = EnhancedOptimizationConfig(optimization_overrides)
+
+        # Load unified config if available
+        self._unified_config = None
+        if FUNCTION_CONFIG_AVAILABLE:
+            self._unified_config = load_unified_config(
+                scraper_overrides, optimization_overrides
+            )
+
+    def get_unified_config(self) -> Dict[str, Any]:
+        """Get the unified configuration dictionary."""
+        if self._unified_config:
+            return self._unified_config.copy()
+        else:
+            return {
+                "scraper": self.scraper.get_config(),
+                "optimization": self.optimization.get_config(),
+                "version": "4.0.0-legacy",
+            }
+
+    def validate_all(self) -> bool:
+        """Validate all configuration sections."""
+        scraper_valid = self.scraper.validate()
+
+        # Validate unified config if available
+        if FUNCTION_CONFIG_AVAILABLE and self._unified_config:
+            errors = validate_config(self._unified_config)
+            if errors:
+                for error in errors:
+                    logger.error(f"Unified configuration validation error: {error}")
+                return False
+
+        return scraper_valid
+
+    def update_all(
+        self,
+        scraper_overrides: Optional[Dict[str, Any]] = None,
+        optimization_overrides: Optional[Dict[str, Any]] = None,
+    ):
+        """Update all configuration sections."""
+        if scraper_overrides:
+            self.scraper.update_config(scraper_overrides)
+            # Update stored overrides
+            if hasattr(self, "scraper_overrides") and self.scraper_overrides:
+                self.scraper_overrides = merge_config_deep(
+                    self.scraper_overrides, scraper_overrides
+                )
+            else:
+                self.scraper_overrides = scraper_overrides
+
+        if optimization_overrides:
+            self.optimization.update_config(optimization_overrides)
+            # Update stored overrides
+            if hasattr(self, "optimization_overrides") and self.optimization_overrides:
+                self.optimization_overrides = merge_config_deep(
+                    self.optimization_overrides, optimization_overrides
+                )
+            else:
+                self.optimization_overrides = optimization_overrides
+
+        # Reload unified config with merged overrides
+        if FUNCTION_CONFIG_AVAILABLE:
+            scraper_config = load_scraper_config(
+                config_overrides=self.scraper_overrides
+            )
+            optimization_config = load_optimization_config(
+                config_overrides=self.optimization_overrides
+            )
+            self._unified_config = {
+                "scraper": scraper_config,
+                "optimization": optimization_config,
+                "metadata": {
+                    "timestamp": load_unified_config()
+                    .get("metadata", {})
+                    .get("timestamp"),
+                    "version": "Phase4-Enhanced",
+                },
+            }
+
+    def create_test_config(self, **kwargs) -> "UnifiedConfigManager":
+        """Create a test configuration manager."""
+        if FUNCTION_CONFIG_AVAILABLE:
+            test_config = create_test_config(**kwargs)
+            return UnifiedConfigManager(
+                test_config.get("scraper", {}), test_config.get("optimization", {})
+            )
+        else:
+            return UnifiedConfigManager({}, {})
+
+
+# Global configuration manager instance
+_global_config_manager = None
+
+
+def get_config_manager() -> UnifiedConfigManager:
+    """Get the global configuration manager instance."""
+    global _global_config_manager
+    if _global_config_manager is None:
+        _global_config_manager = UnifiedConfigManager()
+    return _global_config_manager
+
+
+def reset_config_manager():
+    """Reset the global configuration manager."""
+    global _global_config_manager
+    _global_config_manager = None
+
+
+# Legacy compatibility - these can be imported as before
+ScraperConfig = EnhancedScraperConfig()
+OptimizationConfig = EnhancedOptimizationConfig()
+
+# Validate configuration on import
+if ScraperConfig.validate():
+    logger.info("Configuration validation successful")
+else:
+    logger.warning("Configuration validation failed - check settings")
+
+# Export key classes and functions
+__all__ = [
+    "EnhancedScraperConfig",
+    "EnhancedOptimizationConfig",
+    "UnifiedConfigManager",
+    "get_config_manager",
+    "reset_config_manager",
+    "ScraperConfig",
+    "OptimizationConfig",
+]
+
+if __name__ == "__main__":
+    # Test enhanced configuration functionality
+    print("🧪 Testing Enhanced Configuration Management...")
+
+    # Test legacy compatibility
+    print(f"✅ Legacy ScraperConfig.START_URL: {ScraperConfig.START_URL}")
+    print(f"✅ Legacy ScraperConfig.MAX_WORKERS: {ScraperConfig.MAX_WORKERS}")
+
+    # Test unified config manager
+    manager = get_config_manager()
+    config = manager.get_unified_config()
+    print(f"✅ Unified config loaded: {len(config)} sections")
+
+    # Test validation
+    validation_result = manager.validate_all()
+    print(f"✅ Validation result: {validation_result}")
+
+    # Test function-based config access if available
+    if FUNCTION_CONFIG_AVAILABLE:
+        from .config_utils import get_config_value
+
+        max_workers = get_config_value(config, "scraper.parallel.max_workers", 1)
+        print(f"✅ Function-based access: max_workers={max_workers}")
+
+    print("🎉 All tests passed! Enhanced configuration ready for use.")

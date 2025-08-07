@@ -1,0 +1,20 @@
+[
+  {
+    "index": 0,
+    "label": "Test Node 1",
+    "data_id": "GUID-123-456-789",
+    "has_guid": true
+  },
+  {
+    "index": 1,
+    "label": "Test Node 2",
+    "data_id": "GUID-ABC-DEF-GHI",
+    "has_guid": true
+  },
+  {
+    "index": 2,
+    "label": "Test Node 3 (No GUID)",
+    "data_id": null,
+    "has_guid": false
+  }
+]

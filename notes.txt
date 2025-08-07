@@ -1,0 +1,8 @@
+no hardcoded config values, including scaling parameters, interval time between scaling 
+decisions, interval time for dashboard appearing in terminal, time the background terminal 
+output is supressed to show dashboard
+(only supressed/not showing in terminal but should still be working, REALLY IMPORTANT)
+
+worker 4.7 gets stuck for a bit, add milisecond timestamps
+
+unify the optimization modules?
