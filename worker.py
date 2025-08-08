@@ -19,6 +19,13 @@ try:
     )
     from .logging_setup import log_worker_state, log_function_entry, log_function_exit
     from .optimization_utils import create_optimized_browser
+    from .worker_tracking_display import (
+        log_worker_completion,
+        log_worker_error,
+        track_task_start,
+        track_task_completion,
+        track_task_child_creation,
+    )
 
     # Advanced optimization utilities are reserved for future performance improvements
     ADVANCED_OPTIMIZATION_AVAILABLE = False
@@ -33,6 +40,7 @@ except ImportError:
     import dom_utils
     import logging_setup
     import optimization_utils
+    import worker_tracking_display
 
     MAX_RETRIES = ScraperConfig.MAX_RETRIES
     RETRY_DELAY_BASE = ScraperConfig.RETRY_DELAY_BASE
@@ -49,6 +57,11 @@ except ImportError:
     log_function_entry = logging_setup.log_function_entry
     log_function_exit = logging_setup.log_function_exit
     create_optimized_browser = optimization_utils.create_optimized_browser
+    log_worker_completion = worker_tracking_display.log_worker_completion
+    log_worker_error = worker_tracking_display.log_worker_error
+    track_task_start = worker_tracking_display.track_task_start
+    track_task_completion = worker_tracking_display.track_task_completion
+    track_task_child_creation = worker_tracking_display.track_task_child_creation
     ADVANCED_OPTIMIZATION_AVAILABLE = False
 
     Task = data_structures.Task
@@ -86,6 +99,15 @@ async def process_task_async(task, context, browser):
     worker_id = task.worker_id
     folder_info = task.node_info
     logger = context.logger
+
+    # Track task start in hierarchical tracker
+    track_task_start(
+        context.tracker_state,
+        task.task_id,
+        worker_id,
+        parent_id=task.parent_task_id,
+        metadata={"label": folder_info.label, "depth": folder_info.depth},
+    )
 
     log_function_entry(
         logger,
@@ -167,7 +189,12 @@ async def process_task_async(task, context, browser):
                 node_info=child_node,
                 priority=folder_info.depth
                 + 1,  # Breadth-first: deeper = lower priority
-                parent_task_id=worker_id,
+                parent_task_id=task.task_id,  # Use task_id for hierarchical tracking
+            )
+
+            # Track parent-child relationship
+            track_task_child_creation(
+                context.tracker_state, task.task_id, child_task.task_id
             )
 
             # Submit child task for processing
@@ -176,6 +203,10 @@ async def process_task_async(task, context, browser):
         await page.close()
 
         execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
+
+        # Track task completion
+        track_task_completion(context.tracker_state, task.task_id, "completed")
+
         log_function_exit(
             logger,
             "process_task_async",
@@ -197,6 +228,10 @@ async def process_task_async(task, context, browser):
     except Exception as e:
         execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
         logger.error(f"[{worker_id}] Error processing task: {e}")
+
+        # Track task failure
+        track_task_completion(context.tracker_state, task.task_id, "failed")
+
         log_function_exit(
             logger, "process_task_async", result="error", duration_ms=execution_time
         )
@@ -322,6 +357,11 @@ async def parallel_worker(context, playwright, worker_id):
                     task_id=task.worker_id,
                 )
 
+                # Track task start time for completion logging
+                import time
+
+                task_start_time = time.time()
+
                 # Get browser from pool for this task
                 browser = await create_optimized_browser(
                     playwright, reuse_existing=True
@@ -338,9 +378,20 @@ async def parallel_worker(context, playwright, worker_id):
                 # Process the task with semaphore control
                 result = await process_task_with_semaphore(task, context, browser)
 
+                # Calculate task duration
+                task_duration = time.time() - task_start_time
+
                 # Mark task as completed
                 await context.mark_task_completed(task.worker_id, result)
                 tasks_processed += 1
+
+                # Log worker completion to tracking display
+                log_worker_completion(
+                    f"Worker-{worker_id}",
+                    f"Task-{task.worker_id}",
+                    task_duration,
+                    len(result) if isinstance(result, list) else 0,
+                )
 
                 log_worker_state(
                     logger,
@@ -359,6 +410,9 @@ async def parallel_worker(context, playwright, worker_id):
                     error=str(e),
                     retry_count=task.retry_count,
                 )
+
+                # Log worker error to tracking display
+                log_worker_error(f"Worker-{worker_id}", str(e), task.retry_count)
 
                 # Retry logic with exponential backoff
                 if task.retry_count < MAX_RETRIES:
@@ -406,6 +460,14 @@ async def parallel_worker(context, playwright, worker_id):
             "finished",
             tasks_processed=tasks_processed,
             total_timeouts=consecutive_timeouts,
+        )
+
+        # Log worker completion to tracking display (shutdown)
+        log_worker_completion(
+            f"Worker-{worker_id}",
+            "shutdown",
+            0.0,  # No specific task duration for shutdown
+            tasks_processed,
         )
 
         log_function_exit(

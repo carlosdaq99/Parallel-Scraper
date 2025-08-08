@@ -31,3 +31,39 @@ Always use Mermaid for diagrams in Markdown reports. Use the `mermaid` code bloc
 
 **PowerShell Python Execution Guideline:**
 Do not to run long commands in the terminal, instead write code in a file and run that file.
+
+**Zen MCP Strategic Delegation Guideline:**
+ALWAYS leverage Zen MCP tools for enhanced development workflows. Before implementing any complex task, use mcp_zen_chat to get strategic advice on which tools to use:
+
+1. **Start-of-Prompt Protocol:**
+   - For any complex task, FIRST ask mcp_zen_chat: "I need to [TASK]. What Zen MCP tools should I use and in what order?"
+   - Use `thinking_mode: "high"`
+   - Always enable `use_websearch: true` for current best practices
+
+2. **Immediate Delegation Triggers:**
+   - Tasks requiring >5 implementation steps
+   - Security or performance critical requirements
+   - Code analysis >10 files or multiple systems
+   - Architecture or technology decisions
+   - Complex debugging or root cause analysis
+
+3. **Core Tool Usage Patterns:**
+   - **Strategic Planning:** `mcp_zen_chat` → `mcp_zen_planner` → implement
+   - **Complex Analysis:** `mcp_zen_analyze` → implement → `mcp_zen_codereview`
+   - **Bug Investigation:** `mcp_zen_debug` → `mcp_zen_tracer` → implement fixes
+   - **Critical Decisions:** `mcp_zen_consensus` for multi-perspective validation
+   - **Security Tasks:** ALWAYS use `mcp_zen_secaudit` for security-critical implementations
+
+4. **Context Window Optimization (1M tokens):**
+   - Include entire large files instead of fragments when delegating
+   - Provide complete context including business requirements and constraints
+   - Use continuation IDs for multi-step workflows
+   - Leverage Google integration for real-time information
+
+5. **Quality Assurance Protocol:**
+   - Use systematic workflows for comprehensive analysis
+   - Validate critical findings with `mcp_zen_challenge` tool
+   - Employ confidence tracking (exploring → certain) for completeness
+   - Always request expert validation for complex implementations
+
+**Golden Rule:** When in doubt about complexity, start with `mcp_zen_chat` to get strategic advice before implementing. This ensures optimal use of the 1M context window and Google integration.

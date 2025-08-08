@@ -1,0 +1,174 @@
+{
+  "metadata": {
+    "generated_at": 1754607054.0999053,
+    "total_completed": 15,
+    "total_failed": 2,
+    "interrupted": true,
+    "test_mode": true,
+    "scraper_version": "graceful_shutdown_test"
+  },
+  "completed_tasks": {
+    "test_task_0": {
+      "label": "Test Node 0",
+      "path": "/test/path/0",
+      "depth": 1,
+      "is_leaf": true,
+      "subfolders": [
+        "subfolder_0_0",
+        "subfolder_0_1"
+      ],
+      "timestamp": 1754607054.0998435,
+      "status": "completed"
+    },
+    "test_task_1": {
+      "label": "Test Node 1",
+      "path": "/test/path/1",
+      "depth": 2,
+      "is_leaf": false,
+      "subfolders": [
+        "subfolder_1_0",
+        "subfolder_1_1"
+      ],
+      "timestamp": 1754607054.0998535,
+      "status": "completed"
+    },
+    "test_task_2": {
+      "label": "Test Node 2",
+      "path": "/test/path/2",
+      "depth": 3,
+      "is_leaf": true,
+      "subfolders": [
+        "subfolder_2_0",
+        "subfolder_2_1"
+      ],
+      "timestamp": 1754607054.0998566,
+      "status": "completed"
+    },
+    "test_task_3": {
+      "label": "Test Node 3",
+      "path": "/test/path/3",
+      "depth": 4,
+      "is_leaf": false,
+      "subfolders": [
+        "subfolder_3_0",
+        "subfolder_3_1"
+      ],
+      "timestamp": 1754607054.0998592,
+      "status": "completed"
+    },
+    "test_task_4": {
+      "label": "Test Node 4",
+      "path": "/test/path/4",
+      "depth": 5,
+      "is_leaf": true,
+      "subfolders": [
+        "subfolder_4_0",
+        "subfolder_4_1"
+      ],
+      "timestamp": 1754607054.0998616,
+      "status": "completed"
+    },
+    "dynamic_task_3": {
+      "label": "Dynamic Node 3",
+      "path": "/dynamic/path/3",
+      "depth": 1,
+      "is_leaf": true,
+      "subfolders": [],
+      "timestamp": 1754607054.099863,
+      "status": "completed"
+    },
+    "dynamic_task_6": {
+      "label": "Dynamic Node 6",
+      "path": "/dynamic/path/6",
+      "depth": 1,
+      "is_leaf": true,
+      "subfolders": [],
+      "timestamp": 1754607054.0998647,
+      "status": "completed"
+    },
+    "dynamic_task_9": {
+      "label": "Dynamic Node 9",
+      "path": "/dynamic/path/9",
+      "depth": 1,
+      "is_leaf": true,
+      "subfolders": [],
+      "timestamp": 1754607054.0998664,
+      "status": "completed"
+    },
+    "dynamic_task_12": {
+      "label": "Dynamic Node 12",
+      "path": "/dynamic/path/12",
+      "depth": 1,
+      "is_leaf": true,
+      "subfolders": [],
+      "timestamp": 1754607054.0998676,
+      "status": "completed"
+    },
+    "dynamic_task_15": {
+      "label": "Dynamic Node 15",
+      "path": "/dynamic/path/15",
+      "depth": 1,
+      "is_leaf": true,
+      "subfolders": [],
+      "timestamp": 1754607054.099869,
+      "status": "completed"
+    },
+    "dynamic_task_18": {
+      "label": "Dynamic Node 18",
+      "path": "/dynamic/path/18",
+      "depth": 1,
+      "is_leaf": true,
+      "subfolders": [],
+      "timestamp": 1754607054.0998704,
+      "status": "completed"
+    },
+    "dynamic_task_21": {
+      "label": "Dynamic Node 21",
+      "path": "/dynamic/path/21",
+      "depth": 1,
+      "is_leaf": true,
+      "subfolders": [],
+      "timestamp": 1754607054.0998728,
+      "status": "completed"
+    },
+    "dynamic_task_24": {
+      "label": "Dynamic Node 24",
+      "path": "/dynamic/path/24",
+      "depth": 1,
+      "is_leaf": true,
+      "subfolders": [],
+      "timestamp": 1754607054.0998738,
+      "status": "completed"
+    },
+    "dynamic_task_27": {
+      "label": "Dynamic Node 27",
+      "path": "/dynamic/path/27",
+      "depth": 1,
+      "is_leaf": true,
+      "subfolders": [],
+      "timestamp": 1754607054.0998747,
+      "status": "completed"
+    },
+    "dynamic_task_30": {
+      "label": "Dynamic Node 30",
+      "path": "/dynamic/path/30",
+      "depth": 1,
+      "is_leaf": true,
+      "subfolders": [],
+      "timestamp": 1754607054.0998762,
+      "status": "completed"
+    }
+  },
+  "failed_tasks": {
+    "failed_task_1": {
+      "error": "Connection timeout",
+      "timestamp": 1754607054.099901,
+      "status": "failed"
+    },
+    "failed_task_2": {
+      "error": "Page not found",
+      "timestamp": 1754607054.0999045,
+      "status": "failed"
+    }
+  }
+}

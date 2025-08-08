@@ -101,7 +101,7 @@ class AutoTuningEngine:
         self.failed_tunings = 0
         self.total_improvements = 0.0
 
-        logger.info("🤖 Auto-Tuning Engine initialized")
+        logger.info("Auto-Tuning Engine initialized")
         logger.info(f"   Learning rate: {learning_rate}")
         logger.info(f"   Parameter count: {len(asdict(self.tuning_params))}")
 

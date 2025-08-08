@@ -128,6 +128,49 @@ class ScraperConfig:
     """Delay to suppress terminal output to avoid flickering, in seconds."""
 
     # ============================================================================
+    # WORKER TRACKING CONFIGURATION
+    # Controls granular worker tracking and output verbosity.
+    # ============================================================================
+
+    # Worker tracking display options
+    SHOW_SCALING = os.getenv("SCRAPER_SHOW_SCALING", "true").lower() == "true"
+    """Whether to show scaling decisions in terminal output."""
+
+    SHOW_WORKER_CREATED = os.getenv("SCRAPER_SHOW_CREATED", "true").lower() == "true"
+    """Whether to show worker creation events."""
+
+    SHOW_WORKER_STATE = os.getenv("SCRAPER_SHOW_STATE", "false").lower() == "true"
+    """Whether to show worker state transitions."""
+
+    SHOW_WORKER_COMPLETED = (
+        os.getenv("SCRAPER_SHOW_COMPLETED", "true").lower() == "true"
+    )
+    """Whether to show worker completion events."""
+
+    SHOW_WORKER_ERRORS = os.getenv("SCRAPER_SHOW_ERRORS", "true").lower() == "true"
+    """Whether to show worker error events."""
+
+    SHOW_WORKER_STATUS = os.getenv("SCRAPER_SHOW_STATUS", "false").lower() == "true"
+    """Whether to show periodic worker status summaries."""
+
+    SHOW_WORKER_HIERARCHY = (
+        os.getenv("SCRAPER_SHOW_HIERARCHY", "false").lower() == "true"
+    )
+    """Whether to show hierarchical worker relationships."""
+
+    SHOW_BROWSER_POOL = (
+        os.getenv("SCRAPER_SHOW_BROWSER_POOL", "false").lower() == "true"
+    )
+    """Whether to show browser pool utilization status."""
+
+    # Worker tracking verbosity levels
+    WORKER_TRACKING_VERBOSITY = os.getenv("SCRAPER_VERBOSITY", "normal").lower()
+    """Worker tracking verbosity: minimal, normal, detailed, debug."""
+
+    MAX_RECENT_COMPLETIONS = int(os.getenv("SCRAPER_MAX_RECENT", "10"))
+    """Maximum number of recent completions to track and display."""
+
+    # ============================================================================
     # RETRY CONFIGURATION
     # Defines the behavior for retrying failed operations.
     # ============================================================================

@@ -25,6 +25,10 @@ EXPECTED PERFORMANCE IMPROVEMENTS:
 import asyncio
 import time
 import logging
+import argparse
+import signal
+import json
+from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from pathlib import Path
@@ -46,6 +50,16 @@ try:
         set_current_worker_count,
     )
     from config import get_enhanced_config
+    from worker_tracking_display import (
+        log_scaling_decision,
+        log_worker_creation,
+        log_worker_completion,
+        log_worker_error,
+        show_current_status,
+        sync_browser_pool_with_optimization_metrics,
+        get_worker_tracking_config,
+        create_tracker,
+    )
     from auto_tuning_engine import (
         initialize_auto_tuning,
         get_auto_tuning_engine,
@@ -55,7 +69,12 @@ try:
     from dom_utils import find_objectarx_root_node, get_level1_folders
 
     # Import real-time monitoring dashboard
-    from dashboard_controller import DashboardController
+    from dashboard_controller import (
+        start_dashboard,
+        stop_dashboard,
+        wait_for_dashboard_completion,
+        is_dashboard_running,
+    )
 
     OPTIMIZATIONS_AVAILABLE = True
     print(
@@ -64,6 +83,109 @@ try:
 except ImportError as e:
     print(f"Failed to import self-contained components: {e}")
     sys.exit(1)
+
+
+@dataclass
+class AppConfig:
+    """Configuration for the scraper application with hierarchical tracking options."""
+
+    hierarchical_tracking: bool = True
+    tracking_verbosity: str = "normal"  # quiet, normal, verbose
+    dashboard_enabled: bool = True
+    worker_count: int = 50
+    performance_test_mode: bool = False
+    max_workers: int = 100
+
+
+def parse_arguments() -> AppConfig:
+    """Parse command line arguments and return configuration."""
+    parser = argparse.ArgumentParser(
+        description="Self-Contained Optimized Parallel Scraper with Hierarchical Tracking",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic run with hierarchical tracking
+  python main_self_contained.py --hierarchical-tracking
+
+  # Quiet mode without dashboard
+  python main_self_contained.py --no-dashboard --tracking-verbosity quiet
+
+  # Performance test with 200 workers
+  python main_self_contained.py --workers 200 --performance-test
+
+  # Verbose tracking with dashboard
+  python main_self_contained.py --hierarchical-tracking --tracking-verbosity verbose --dashboard
+        """,
+    )
+
+    # Hierarchical tracking options
+    parser.add_argument(
+        "--hierarchical-tracking",
+        action="store_true",
+        default=True,
+        help="Enable hierarchical worker tracking (default: enabled)",
+    )
+    parser.add_argument(
+        "--no-hierarchical-tracking",
+        dest="hierarchical_tracking",
+        action="store_false",
+        help="Disable hierarchical worker tracking",
+    )
+
+    parser.add_argument(
+        "--tracking-verbosity",
+        type=str,
+        choices=["quiet", "normal", "verbose"],
+        default="normal",
+        help="Set tracking verbosity level (default: normal)",
+    )
+
+    # Dashboard options
+    parser.add_argument(
+        "--dashboard",
+        action="store_true",
+        default=True,
+        help="Enable dashboard (default: enabled)",
+    )
+    parser.add_argument(
+        "--no-dashboard",
+        dest="dashboard_enabled",
+        action="store_false",
+        help="Disable dashboard",
+    )
+
+    # Worker configuration
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=50,
+        help="Initial number of workers (default: 50)",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=100,
+        help="Maximum number of workers (default: 100)",
+    )
+
+    # Performance testing
+    parser.add_argument(
+        "--performance-test",
+        action="store_true",
+        help="Enable performance test mode with detailed metrics",
+    )
+
+    args = parser.parse_args()
+
+    return AppConfig(
+        hierarchical_tracking=args.hierarchical_tracking,
+        tracking_verbosity=args.tracking_verbosity,
+        dashboard_enabled=args.dashboard_enabled,
+        worker_count=args.workers,
+        max_workers=args.max_workers,
+        performance_test_mode=args.performance_test,
+    )
+
 
 # Configuration with proactive scaling
 START_URL = config.SCRAPER.START_URL
@@ -92,22 +214,25 @@ def update_worker_count(new_count: int, reason: str = "Adaptive scaling") -> Non
     global _adaptive_workers
     old_count = _adaptive_workers
 
-    print(f"🔧 UPDATE DEBUG: old_count={old_count}, requested_count={new_count}")
+    log_scaling_decision(old_count, new_count, f"Worker count update: {reason}")
 
     # Get dynamic config for limits (proactive scaling: 20-100 workers)
     try:
         config_dict = get_enhanced_config()
         max_workers = config_dict.get("max_workers", 200)  # Updated fallback to 200
         min_workers = config_dict.get("min_workers", 20)
-        print(f"🔧 CONFIG DEBUG: min={min_workers}, max={max_workers}")
     except Exception as e:
-        print(f"🔧 CONFIG ERROR: {e}, using defaults")
+        print(f"Config error: {e}, using defaults")
         max_workers = 200  # Updated fallback to 200
         min_workers = 20
 
     # Validate new count within proactive range
     new_count = max(min_workers, min(new_count, max_workers))
-    print(f"🔧 VALIDATED: final_count={new_count}")
+    log_scaling_decision(
+        old_count,
+        new_count,
+        f"Worker count validated to {new_count} (range: {min_workers}-{max_workers})",
+    )
 
     _adaptive_workers = new_count
 
@@ -116,6 +241,9 @@ def update_worker_count(new_count: int, reason: str = "Adaptive scaling") -> Non
 
     # Update the global scaling engine worker count (CRITICAL: This synchronizes the scaling engine)
     set_current_worker_count(new_count)
+
+    # Log scaling decision to worker tracking display
+    log_scaling_decision(old_count, new_count, reason)
 
     print(f"Workers adjusted: {old_count} -> {new_count} ({reason})")
     print(
@@ -133,7 +261,7 @@ async def scale_workers_to_target(
     ]
     current_count = len(worker_tasks)
 
-    print(f"🔧 SCALE WORKERS: current={current_count}, target={target_count}")
+    log_scaling_decision(current_count, target_count, "Adaptive scaling")
 
     if target_count > current_count:
         # Create new worker tasks
@@ -147,20 +275,31 @@ async def scale_workers_to_target(
                 )
                 current_tasks.append(task)
                 new_tasks_created += 1
-                print(f"🔧 CREATED: Worker-{worker_id} task")
+
+                # Log worker creation to tracking display
+                log_worker_creation(f"Worker-{worker_id}")
+
                 # Add small delay to prevent overwhelming the system
                 await asyncio.sleep(0.01)
             except Exception as e:
-                print(f"🔧 ERROR creating worker {i}: {e}")
+                log_worker_error(f"Worker-{i}", f"Creation error: {e}")
                 break
 
-        print(f"🔧 SCALE UP: Created {new_tasks_created} new worker tasks")
+        log_scaling_decision(
+            current_count,
+            current_count + new_tasks_created,
+            f"Scale up: Created {new_tasks_created} new worker tasks",
+        )
 
     elif target_count < current_count:
         # For scale-down, signal workers to shutdown gracefully
         # Note: This is more complex and may require worker-level shutdown signaling
         workers_to_shutdown = current_count - target_count
-        print(f"🔧 SCALE DOWN: Need to shutdown {workers_to_shutdown} workers")
+        log_scaling_decision(
+            current_count,
+            target_count,
+            f"Scale down: Need to shutdown {workers_to_shutdown} workers",
+        )
         # Implementation note: Worker shutdown requires coordination with worker logic
         # For now, we'll rely on natural worker completion
 
@@ -278,13 +417,13 @@ async def perform_adaptive_scaling_check(
             # DIAGNOSTIC: Log when fallback is used
             if "target_workers" not in scaling_decision:
                 print(
-                    f"⚠️  FALLBACK TRIGGERED: scaling_decision missing 'target_workers', "
+                    f"WARNING: FALLBACK TRIGGERED: scaling_decision missing 'target_workers', "
                     f"using config fallback (+{scale_increment})"
                 )
-                print(f"⚠️  scaling_decision contents: {scaling_decision}")
+                print(f"WARNING: scaling_decision contents: {scaling_decision}")
             else:
                 print(
-                    f"✅ Using scaling engine target_workers: {scaling_decision['target_workers']}"
+                    f"SUCCESS: Using scaling engine target_workers: {scaling_decision['target_workers']}"
                 )
             update_worker_count(
                 target_workers,
@@ -301,14 +440,18 @@ async def perform_adaptive_scaling_check(
                     tasks[:] = await scale_workers_to_target(
                         target_workers, tasks, worker_context, playwright
                     )
-                    print(
-                        f"🔧 SCALING APPLIED: Tasks list now has {len(tasks)} total tasks"
+                    log_scaling_decision(
+                        len(tasks),
+                        target_workers,
+                        f"Scaling applied: Tasks list now has {len(tasks)} total tasks",
                     )
                 except Exception as e:
-                    print(f"🔧 SCALING ERROR: Failed to scale workers: {e}")
+                    log_worker_error("System", f"Failed to scale workers: {e}")
             else:
-                print(
-                    "🔧 SCALING SKIPPED: Missing parameters for dynamic worker scaling"
+                log_scaling_decision(
+                    current_workers,
+                    current_workers,
+                    "Scaling skipped: Missing parameters for dynamic worker scaling",
                 )
 
             _last_scaling_time = current_time
@@ -326,13 +469,13 @@ async def perform_adaptive_scaling_check(
             # DIAGNOSTIC: Log when fallback is used
             if "target_workers" not in scaling_decision:
                 print(
-                    f"⚠️  FALLBACK TRIGGERED: scaling_decision missing 'target_workers', "
+                    f"WARNING: FALLBACK TRIGGERED: scaling_decision missing 'target_workers', "
                     f"using config fallback (-{scale_decrement})"
                 )
-                print(f"⚠️  scaling_decision contents: {scaling_decision}")
+                print(f"WARNING: scaling_decision contents: {scaling_decision}")
             else:
                 print(
-                    f"✅ Using scaling engine target_workers: {scaling_decision['target_workers']}"
+                    f"SUCCESS: Using scaling engine target_workers: {scaling_decision['target_workers']}"
                 )
             update_worker_count(
                 target_workers,
@@ -349,14 +492,18 @@ async def perform_adaptive_scaling_check(
                     tasks[:] = await scale_workers_to_target(
                         target_workers, tasks, worker_context, playwright
                     )
-                    print(
-                        f"🔧 SCALING APPLIED: Tasks list now has {len(tasks)} total tasks"
+                    log_scaling_decision(
+                        len(tasks),
+                        target_workers,
+                        f"Scaling applied: Tasks list now has {len(tasks)} total tasks",
                     )
                 except Exception as e:
-                    print(f"🔧 SCALING ERROR: Failed to scale workers: {e}")
+                    log_worker_error("System", f"Failed to scale workers: {e}")
             else:
-                print(
-                    "🔧 SCALING SKIPPED: Missing parameters for dynamic worker scaling"
+                log_scaling_decision(
+                    current_workers,
+                    current_workers,
+                    "Scaling skipped: Missing parameters for dynamic worker scaling",
                 )
 
             _last_scaling_time = current_time
@@ -365,6 +512,9 @@ async def perform_adaptive_scaling_check(
             print(
                 f"FIXED engine: No scaling needed - {scaling_decision.get('reasoning', 'Performance stable')}"
             )
+
+        # Sync browser pool status after any scaling operation
+        sync_browser_pool_with_optimization_metrics()
 
     except Exception as e:
         print(f"Adaptive scaling check failed: {e}")
@@ -536,24 +686,113 @@ class SelfContainedScrapingManager:
                 self.logger.debug("Could not get optimization metrics: %s", e)
 
 
+async def save_progress_to_json(worker_context, output_file: str, logger):
+    """Save current progress to JSON file for graceful shutdown."""
+    try:
+        logger.info(f"Saving progress to {output_file}...")
+
+        # Build JSON structure from completed tasks
+        json_structure = {}
+        for task_id, node_info in worker_context.completed_tasks.items():
+            json_structure[task_id] = {
+                "label": node_info.label,
+                "path": node_info.path,
+                "depth": node_info.depth,
+                "is_leaf": node_info.is_leaf,
+                "subfolders": node_info.subfolders,
+                "timestamp": datetime.now().isoformat(),
+                "status": "completed",
+            }
+
+        # Add failed tasks for debugging
+        failed_structure = {}
+        for task_id, error_info in worker_context.failed_tasks.items():
+            failed_structure[task_id] = {
+                "error": str(error_info),
+                "timestamp": datetime.now().isoformat(),
+                "status": "failed",
+            }
+
+        # Create final output with metadata
+        final_output = {
+            "metadata": {
+                "generated_at": datetime.now().isoformat(),
+                "total_completed": len(json_structure),
+                "total_failed": len(failed_structure),
+                "interrupted": True,  # Mark as interrupted shutdown
+                "scraper_version": "self_contained_with_hierarchical_tracking",
+            },
+            "completed_tasks": json_structure,
+            "failed_tasks": failed_structure,
+        }
+
+        # Save to file
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(final_output, f, indent=2, ensure_ascii=False)
+
+        logger.info(
+            f"Progress saved: {len(json_structure)} completed, {len(failed_structure)} failed tasks"
+        )
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to save progress: {e}")
+        return False
+
+
 async def main():
-    """Main scraping function with FIXED scaling engine."""
+    """Main scraping function with hierarchical tracking and configuration options."""
+    # Parse command line arguments
+    app_config = parse_arguments()
+
     manager = SelfContainedScrapingManager()
 
     # Initialize FIXED adaptive scaling
     initialize_adaptive_scaling()
 
+    # Configure logging based on performance test mode
+    if app_config.performance_test_mode:
+        logging.getLogger().setLevel(logging.WARNING)
+        print("Performance test mode: Reduced logging verbosity")
+
     manager.logger.info("Starting proactive parallel scraper with FIXED scaling engine")
     manager.logger.info("   Target URL: %s", START_URL)
-    manager.logger.info("   Initial Workers: %s", INITIAL_WORKERS)
-    manager.logger.info("   Worker Range: 20-100 (proactive scaling)")
+    manager.logger.info("   Initial Workers: %s", app_config.worker_count)
+    manager.logger.info(
+        "   Worker Range: 20-%s (proactive scaling)", app_config.max_workers
+    )
     manager.logger.info("   Output: %s", OUTPUT_FILE)
-    manager.logger.info("   Scaling Engine: ALL ISSUES FIXED")
+    manager.logger.info(
+        "   Hierarchical Tracking: %s", app_config.hierarchical_tracking
+    )
+    manager.logger.info("   Tracking Verbosity: %s", app_config.tracking_verbosity)
+    manager.logger.info("   Dashboard Enabled: %s", app_config.dashboard_enabled)
+    manager.logger.info(
+        "   Performance Test Mode: %s", app_config.performance_test_mode
+    )
 
     tasks = []
     stop_event = asyncio.Event()
     worker_context = None
-    dashboard_controller = None
+    hierarchical_tracker = None
+
+    # Set up signal handlers for graceful shutdown
+    def signal_handler():
+        """Handle shutdown signals gracefully."""
+        manager.logger.info("Received shutdown signal (Ctrl+C)")
+        stop_event.set()
+
+    # Register signal handlers for different platforms
+    if hasattr(signal, "SIGINT"):
+        try:
+            # For async signal handling
+            loop = asyncio.get_event_loop()
+            loop.add_signal_handler(signal.SIGINT, signal_handler)
+            manager.logger.debug("Async SIGINT handler registered")
+        except (OSError, NotImplementedError):
+            # Fallback for Windows or other platforms
+            signal.signal(signal.SIGINT, lambda s, f: signal_handler())
+            manager.logger.debug("Standard SIGINT handler registered")
 
     try:
         async with async_playwright() as playwright:
@@ -632,8 +871,15 @@ async def main():
                 initial_tasks.append(task)
 
             # Create worker context with adaptive scaling
-            max_workers = get_current_workers()  # Start with initial worker count (50)
+            max_workers = app_config.worker_count  # Use configured worker count
             worker_context = ParallelWorkerContext(max_workers, manager.logger)
+
+            # Initialize hierarchical tracker
+            hierarchical_tracker = create_tracker(app_config, worker_context)
+            hierarchical_tracker.start()
+
+            # Update global worker count to match configuration
+            update_worker_count(app_config.worker_count, "Configuration")
 
             # Add tasks to context using proper submit_task method
             for task in initial_tasks:
@@ -644,16 +890,17 @@ async def main():
                 "   Starting with %s workers using FIXED scaling engine", max_workers
             )
 
-            # Start dashboard using DashboardController
-            if worker_context:
+            # Start dashboard using function-based controller
+            if worker_context and app_config.dashboard_enabled:
                 try:
                     manager.logger.info("Initializing dashboard controller...")
 
-                    # Create and start dashboard controller
-                    dashboard_controller = DashboardController(ScraperConfig)
-                    await dashboard_controller.start_dashboard(worker_context)
+                    # Start dashboard using function-based approach
+                    dashboard_started = await start_dashboard(
+                        ScraperConfig, worker_context
+                    )
 
-                    if dashboard_controller.is_running():
+                    if dashboard_started:
                         manager.logger.info("Dashboard controller started successfully")
                         print(
                             f"🖥️ DASHBOARD: Controller started with update interval "
@@ -675,6 +922,27 @@ async def main():
                         exc_info=True,
                     )
 
+            # Start worker tracking monitor if enabled
+            try:
+                tracking_config = get_worker_tracking_config()
+                if tracking_config.get("SHOW_STATUS", False) or tracking_config.get(
+                    "SHOW_HIERARCHY", False
+                ):
+                    manager.logger.info("Starting worker tracking monitor...")
+                    tracking_task = asyncio.create_task(
+                        start_worker_tracking_monitor(worker_context, interval=30.0)
+                    )
+                    tasks.append(tracking_task)
+                    print("WORKER TRACKING: Monitor started with 30-second intervals")
+                else:
+                    print(
+                        "WORKER TRACKING: Status monitoring disabled via configuration"
+                    )
+            except Exception as e:
+                manager.logger.error(
+                    "Failed to start worker tracking monitor: %s", e, exc_info=True
+                )
+
             # Start workers with correct call signature
             try:
                 manager.logger.info("Creating %s worker tasks...", max_workers)
@@ -684,6 +952,10 @@ async def main():
                         parallel_worker(worker_context, playwright, worker_id)
                     )
                     tasks.append(task)
+
+                    # Log initial worker creation to tracking display
+                    log_worker_creation(f"Worker-{worker_id}")
+
                 manager.logger.info(
                     "Successfully created %s worker tasks", len(tasks) - 2
                 )  # Subtract 2 for monitor tasks
@@ -725,8 +997,30 @@ async def main():
                     manager.logger.info(
                         "Waiting for all tasks to complete using queue.join()..."
                     )
-                    await worker_context.task_queue.join()
-                    manager.logger.info("All tasks completed successfully")
+
+                    # Create cancellable wait task that responds to stop_event
+                    async def wait_with_cancellation():
+                        while not stop_event.is_set():
+                            try:
+                                # Wait for queue completion with timeout to check stop_event
+                                await asyncio.wait_for(
+                                    worker_context.task_queue.join(), timeout=1.0
+                                )
+                                return  # Queue is empty, all tasks complete
+                            except asyncio.TimeoutError:
+                                # Timeout allows us to check stop_event again
+                                continue
+                        # If we get here, stop_event was set
+                        manager.logger.info("Stop event received during queue wait")
+
+                    await wait_with_cancellation()
+
+                    if not stop_event.is_set():
+                        manager.logger.info("All tasks completed successfully")
+                    else:
+                        manager.logger.info(
+                            "Shutdown requested - stopping queue processing"
+                        )
                 except Exception as e:
                     manager.logger.error("Error waiting for tasks to complete: %s", e)
 
@@ -744,12 +1038,32 @@ async def main():
                 )
 
     except KeyboardInterrupt:
-        manager.logger.info("Stopping scraper...")
+        manager.logger.info("Received Ctrl+C - initiating graceful shutdown...")
+
+        # Save progress if we have worker context with completed tasks
+        if worker_context and hasattr(worker_context, "completed_tasks"):
+            if worker_context.completed_tasks:
+                await save_progress_to_json(worker_context, OUTPUT_FILE, manager.logger)
+                print(f"\nSUCCESS: Progress saved to {OUTPUT_FILE}")
+                print(f"   Completed: {len(worker_context.completed_tasks)} tasks")
+                print(f"   Failed: {len(worker_context.failed_tasks)} tasks")
+            else:
+                manager.logger.info("No completed tasks to save")
+        else:
+            manager.logger.warning("Worker context not available for progress saving")
     except Exception as e:
         manager.logger.error("Critical error: %s", e, exc_info=True)
     finally:
         # Cleanup
         stop_event.set()
+
+        # Stop hierarchical tracker
+        if "hierarchical_tracker" in locals() and hierarchical_tracker:
+            try:
+                hierarchical_tracker.stop()
+                manager.logger.info("Hierarchical tracker stopped")
+            except Exception as e:
+                manager.logger.warning(f"Error stopping hierarchical tracker: {e}")
 
         # Clean up browser pool BEFORE playwright context exit
         try:
@@ -759,13 +1073,13 @@ async def main():
             manager.logger.warning(f"Error during browser cleanup: {e}")
 
         # Stop dashboard controller
-        if dashboard_controller:
-            try:
-                dashboard_controller.stop_dashboard()
-                await dashboard_controller.wait_for_completion()
+        try:
+            if app_config.dashboard_enabled:
+                stop_dashboard()
+                await wait_for_dashboard_completion()
                 manager.logger.info("Dashboard controller stopped successfully")
-            except Exception as e:
-                manager.logger.warning(f"Error stopping dashboard controller: {e}")
+        except Exception as e:
+            manager.logger.warning(f"Error stopping dashboard controller: {e}")
 
         # Final metrics
         metrics = manager.get_metrics()

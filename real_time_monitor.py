@@ -278,7 +278,9 @@ class RealTimeMonitor:
 
                 unified_data = get_metrics_for_dashboard(self.worker_context)
                 print(
-                    f"🔧 Dashboard using UNIFIED metrics: worker_util={unified_data.get('worker_utilization', 'N/A')}%, queue={unified_data.get('queue_length', 'N/A')}"
+                    f"DEBUG: Dashboard using UNIFIED metrics: "
+                    f"worker_util={unified_data.get('worker_utilization', 'N/A')}%, "
+                    f"queue={unified_data.get('queue_length', 'N/A')}"
                 )
 
                 # Map unified data to dashboard metrics
@@ -381,7 +383,7 @@ class RealTimeMonitor:
                 return metrics
 
             except ImportError:
-                print("🔧 Dashboard falling back to legacy metrics collection")
+                print("DEBUG: Dashboard falling back to legacy metrics collection")
                 pass
             # Always try to collect basic metrics from worker context (no adaptive modules needed)
             if self.worker_context:
@@ -596,7 +598,7 @@ class RealTimeMonitor:
         reset = self._get_color_code("reset")
         gray = self._get_color_code("white")
 
-        print(f"{bold}{blue}📊 PERFORMANCE METRICS{reset}")
+        print(f"{bold}{blue}PERFORMANCE METRICS{reset}")
         print(f"{'─'*self.dashboard_width}")
 
         if metrics.has_performance_data:
@@ -672,7 +674,7 @@ class RealTimeMonitor:
                 f"CPU Usage:         {cpu_usage:>20} | Memory Usage:     {memory_usage_percent:>15}"
             )
             print(
-                f"Memory Available:  {memory_usage_mb:>20} | Load Metrics:               ✅"
+                f"Memory Available:  {memory_usage_mb:>20} | Load Metrics:               SUCCESS"
             )
         else:
             print(f"{gray}System resource monitoring not available{reset}")
@@ -685,7 +687,7 @@ class RealTimeMonitor:
         reset = self._get_color_code("reset")
         gray = self._get_color_code("white")
 
-        print(f"{bold}{magenta}🎯 ADAPTIVE SCALING{reset}")
+        print(f"{bold}{magenta}ADAPTIVE SCALING{reset}")
         print(f"{'─'*self.dashboard_width}")
 
         if metrics.has_adaptive_data:
@@ -699,7 +701,7 @@ class RealTimeMonitor:
                 if metrics.pattern_detected
                 else "None"
             )
-            auto_tuning = "✅ Active" if metrics.auto_tuning_active else "❌ Inactive"
+            auto_tuning = "SUCCESS Active" if metrics.auto_tuning_active else "INACTIVE"
 
             print(f"Scaling Status:    {scaling_status}")
             print(
@@ -802,7 +804,7 @@ class RealTimeMonitor:
         gray = self._get_color_code("white")
 
         print(
-            f"{bold}{yellow}📈 PERFORMANCE TRENDS (Last {len(self.performance_history)} samples){reset}"
+            f"{bold}{yellow}PERFORMANCE TRENDS (Last {len(self.performance_history)} samples){reset}"
         )
         print(f"{'─'*self.dashboard_width}")
 
@@ -838,10 +840,10 @@ class RealTimeMonitor:
                     )  # Historical average
 
                     success_trend = (
-                        "📈"
+                        "UP"
                         if len(recent_success) > 1
                         and recent_success[-1] > recent_success[-2]
-                        else "📉" if len(recent_success) > 1 else "━"
+                        else "DOWN" if len(recent_success) > 1 else "STABLE"
                     )
                     # Show CURRENT rate prominently, avg in smaller text
                     print(
@@ -858,9 +860,9 @@ class RealTimeMonitor:
                     )
                     avg_cpu = sum(recent_cpu) / len(recent_cpu)
                     cpu_trend = (
-                        "📈"
+                        "UP"
                         if len(recent_cpu) > 1 and recent_cpu[-1] > recent_cpu[-2]
-                        else "📉" if len(recent_cpu) > 1 else "━"
+                        else "DOWN" if len(recent_cpu) > 1 else "STABLE"
                     )
                     if recent_success:
                         print(
@@ -1034,7 +1036,7 @@ async def run_monitor_dashboard(update_interval: int = None):
 # Demo/test function
 async def demo_dashboard():
     """Demo the dashboard with sample data"""
-    print("🚀 Starting Real-Time Monitor Dashboard Demo...")
+    print("Starting Real-Time Monitor Dashboard Demo...")
     print(
         f"Update interval: {ScraperConfig.DASHBOARD_DEMO_INTERVAL} seconds (demo mode)"
     )

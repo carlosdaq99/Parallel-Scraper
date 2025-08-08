@@ -258,7 +258,9 @@ def get_scaling_config() -> Dict[str, Any]:
                         f"scale_down_increment={_scaling_config['scale_down_increment']}"
                     )
             except Exception as e:
-                print(f"⚠️  ADAPTIVE SCALING: Failed to integrate enhanced config: {e}")
+                print(
+                    f"WARNING: ADAPTIVE SCALING: Failed to integrate enhanced config: {e}"
+                )
 
     return _scaling_config
 

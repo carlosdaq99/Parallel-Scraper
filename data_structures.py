@@ -10,6 +10,7 @@ from typing import List, Dict, Set, Optional
 from datetime import datetime
 import asyncio
 import logging
+import uuid
 
 # Import config with fallback
 try:
@@ -100,7 +101,7 @@ class NodeInfo:
 
 @dataclass
 class Task:
-    """Task definition for queue-based worker system"""
+    """Task definition for queue-based worker system with hierarchical tracking"""
 
     worker_id: str
     node_info: NodeInfo
@@ -108,6 +109,9 @@ class Task:
     retry_count: int = 0
     parent_task_id: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.now)
+    # Hierarchical tracking fields
+    task_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    metadata: Dict = field(default_factory=dict)
 
     def __lt__(self, other):
         """For priority queue ordering - prioritize by depth (breadth-first)"""
@@ -116,12 +120,14 @@ class Task:
     def to_dict(self) -> Dict:
         """Convert Task to dictionary for logging and debugging"""
         return {
+            "task_id": self.task_id,
             "worker_id": self.worker_id,
             "node_info": self.node_info.to_dict(),
             "priority": self.priority,
             "retry_count": self.retry_count,
             "parent_task_id": self.parent_task_id,
             "created_at": self.created_at.isoformat(),
+            "metadata": self.metadata,
         }
 
 
@@ -140,6 +146,17 @@ class ParallelWorkerContext:
 
         # Hierarchical worker management
         self.worker_manager = WorkerManager(max_workers)
+
+        # Hierarchical task tracking
+        try:
+            from .worker_tracking_display import initialize_tracker_state
+        except ImportError:
+            # Fallback for standalone execution
+            import worker_tracking_display
+
+            initialize_tracker_state = worker_tracking_display.initialize_tracker_state
+
+        self.tracker_state = initialize_tracker_state()
 
         # Statistics
         self.total_tasks_created = 0
