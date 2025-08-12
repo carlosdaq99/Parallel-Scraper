@@ -21,7 +21,11 @@ try:
 except ImportError:
     # Fallback for standalone execution
     class ScraperConfig:
-        DASHBOARD_UPDATE_INTERVAL = 10.0  # Match config.py value
+        REAL_TIME_MONITOR_ENABLED = False  # Default disabled
+        REAL_TIME_MONITOR_INTERVAL = 20  # Default 20 seconds
+        # Legacy compatibility
+        DASHBOARD_UPDATE_INTERVAL = 20  # Use real-time monitor interval
+        ENABLE_DASHBOARD = False  # Use real-time monitor enabled setting
         DASHBOARD_DEMO_INTERVAL = 5.0
         TERMINAL_OUTPUT_SUPPRESSION = 0.5
         TREND_ANALYSIS_MIN_SAMPLES = 2
@@ -114,7 +118,7 @@ class RealTimeMonitor:
             worker_context: Active worker context for real metrics collection
         """
         self.update_interval = (
-            update_interval or ScraperConfig.DASHBOARD_UPDATE_INTERVAL
+            update_interval or ScraperConfig.REAL_TIME_MONITOR_INTERVAL
         )
         self.worker_context = worker_context
         self.is_running = False
@@ -1010,7 +1014,7 @@ def start_real_time_monitor(
 
     if _monitor_instance is None:
         _monitor_instance = RealTimeMonitor(
-            update_interval or ScraperConfig.DASHBOARD_UPDATE_INTERVAL, worker_context
+            update_interval or ScraperConfig.REAL_TIME_MONITOR_INTERVAL, worker_context
         )
 
     return _monitor_instance
@@ -1028,7 +1032,7 @@ def stop_real_time_monitor():
 async def run_monitor_dashboard(update_interval: int = None):
     """Run the monitor dashboard (async)"""
     monitor = start_real_time_monitor(
-        update_interval or ScraperConfig.DASHBOARD_UPDATE_INTERVAL
+        update_interval or ScraperConfig.REAL_TIME_MONITOR_INTERVAL
     )
     await monitor.run_dashboard()
 

@@ -59,6 +59,7 @@ try:
         sync_browser_pool_with_optimization_metrics,
         get_worker_tracking_config,
         create_tracker,
+        start_worker_tracking_monitor,
     )
     from auto_tuning_engine import (
         initialize_auto_tuning,
@@ -370,7 +371,9 @@ async def perform_adaptive_scaling_check(
         try:
             import psutil
 
-            cpu_usage = psutil.cpu_percent(interval=0.1)  # Quick sample
+            cpu_usage = psutil.cpu_percent(
+                interval=1.0
+            )  # Use 1 second for accurate reading
             memory_info = psutil.virtual_memory()
             memory_usage_mb = (memory_info.total - memory_info.available) / (
                 1024 * 1024
@@ -441,9 +444,9 @@ async def perform_adaptive_scaling_check(
                         target_workers, tasks, worker_context, playwright
                     )
                     log_scaling_decision(
-                        len(tasks),
+                        current_workers,
                         target_workers,
-                        f"Scaling applied: Tasks list now has {len(tasks)} total tasks",
+                        f"Scaling applied: Workers changed from {current_workers} to {target_workers}",
                     )
                 except Exception as e:
                     log_worker_error("System", f"Failed to scale workers: {e}")
@@ -493,9 +496,9 @@ async def perform_adaptive_scaling_check(
                         target_workers, tasks, worker_context, playwright
                     )
                     log_scaling_decision(
-                        len(tasks),
+                        current_workers,
                         target_workers,
-                        f"Scaling applied: Tasks list now has {len(tasks)} total tasks",
+                        f"Scaling applied: Workers changed from {current_workers} to {target_workers}",
                     )
                 except Exception as e:
                     log_worker_error("System", f"Failed to scale workers: {e}")
@@ -904,10 +907,10 @@ async def main():
                         manager.logger.info("Dashboard controller started successfully")
                         print(
                             f"🖥️ DASHBOARD: Controller started with update interval "
-                            f"{ScraperConfig.DASHBOARD_UPDATE_INTERVAL} seconds"
+                            f"{ScraperConfig.REAL_TIME_MONITOR_INTERVAL} seconds"
                         )
                         print(
-                            f"🖥️ DASHBOARD: Status - Enabled: {ScraperConfig.ENABLE_DASHBOARD}"
+                            f"🖥️ DASHBOARD: Status - Enabled: {ScraperConfig.REAL_TIME_MONITOR_ENABLED}"
                         )
                     else:
                         manager.logger.info(
@@ -957,15 +960,15 @@ async def main():
                     log_worker_creation(f"Worker-{worker_id}")
 
                 manager.logger.info(
-                    "Successfully created %s worker tasks", len(tasks) - 2
-                )  # Subtract 2 for monitor tasks
+                    "Successfully created %s worker tasks", get_current_workers()
+                )  # Using actual worker count instead of task count
             except Exception as e:
                 manager.logger.error(
                     "Failed to create worker tasks: %s", e, exc_info=True
                 )
 
             manager.logger.info(
-                "Started %s workers with FIXED scaling engine", len(tasks)
+                "Started %s workers with FIXED scaling engine", get_current_workers()
             )
 
             # Progress monitoring and FIXED adaptive scaling loop

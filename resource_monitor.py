@@ -136,7 +136,9 @@ class SystemResourceMonitor:
 
         # Get system resource information
         memory = psutil.virtual_memory()
-        cpu_percent = psutil.cpu_percent(interval=0.1)
+        cpu_percent = psutil.cpu_percent(
+            interval=1.0
+        )  # Use 1 second for accurate reading
 
         # Disk usage (cross-platform path)
         try:
@@ -561,7 +563,9 @@ def get_system_resources() -> Dict[str, Any]:
 
         # Get basic system metrics
         memory = psutil.virtual_memory()
-        cpu_percent = psutil.cpu_percent(interval=0.1)
+        cpu_percent = psutil.cpu_percent(
+            interval=1.0
+        )  # Use 1 second for accurate reading
 
         return {
             "cpu_percent": round(cpu_percent, 1),

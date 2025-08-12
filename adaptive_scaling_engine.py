@@ -299,7 +299,9 @@ def collect_performance_metrics() -> PerformanceMetrics:
         memory_usage_mb = enhanced_metrics.get("memory_usage_mb", 0.0)
 
         # Get additional system metrics
-        cpu_percent = psutil.cpu_percent(interval=0.1)
+        cpu_percent = psutil.cpu_percent(
+            interval=1.0
+        )  # Use 1 second for accurate reading
 
         # Calculate derived metrics
         avg_page_load_time = enhanced_metrics.get("processing_time_ms", 0) / 1000.0
@@ -342,7 +344,9 @@ def collect_performance_metrics() -> PerformanceMetrics:
             pages_per_second=0.0,
             avg_page_load_time=1.0,
             success_rate=0.9,
-            cpu_usage_percent=psutil.cpu_percent(interval=0.1),
+            cpu_usage_percent=psutil.cpu_percent(
+                interval=1.0
+            ),  # Use 1 second for accurate reading
             memory_usage_mb=psutil.virtual_memory().used / 1024 / 1024,
         )
 
@@ -360,7 +364,9 @@ def collect_resource_availability() -> ResourceAvailability:
         # Get system resource information
         memory = psutil.virtual_memory()
         cpu_count = psutil.cpu_count()
-        cpu_percent = psutil.cpu_percent(interval=0.1)
+        cpu_percent = psutil.cpu_percent(
+            interval=1.0
+        )  # Use 1 second for accurate reading
 
         # Disk usage (cross-platform)
         try:

@@ -47,7 +47,7 @@ async def start_dashboard(config, context):
 
         # Create the RealTimeMonitor instance
         _dashboard_monitor = start_real_time_monitor(
-            config.DASHBOARD_UPDATE_INTERVAL, context
+            config.REAL_TIME_MONITOR_INTERVAL, context
         )
 
         # Start the dashboard task in background
@@ -57,7 +57,7 @@ async def start_dashboard(config, context):
         )
 
         _logger.info(
-            f"Dashboard controller started with update interval {config.DASHBOARD_UPDATE_INTERVAL} seconds"
+            f"Dashboard controller started with update interval {config.REAL_TIME_MONITOR_INTERVAL} seconds"
         )
         return True
 

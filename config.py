@@ -44,10 +44,10 @@ class ScraperConfig:
     # PARALLEL PROCESSING CONFIGURATION
     # Controls the concurrency and scaling behavior of the scraper.
     # ============================================================================
-    MAX_CONCURRENT_PAGES = int(os.getenv("SCRAPER_MAX_CONCURRENT_PAGES", "200"))
+    MAX_CONCURRENT_PAGES = int(os.getenv("SCRAPER_MAX_CONCURRENT_PAGES", "500"))
     """The absolute maximum number of concurrent browser pages allowed."""
 
-    MAX_WORKERS = int(os.getenv("SCRAPER_MAX_WORKERS", "200"))
+    MAX_WORKERS = int(os.getenv("SCRAPER_MAX_WORKERS", "500"))
     """The upper limit for the adaptive scaling engine."""
 
     MIN_WORKERS = int(os.getenv("SCRAPER_MIN_WORKERS", "20"))
@@ -59,7 +59,7 @@ class ScraperConfig:
     MAX_DEPTH = int(os.getenv("SCRAPER_MAX_DEPTH", "999"))
     """The maximum depth to traverse in the documentation tree."""
 
-    MAX_SUBFOLDERS_TO_SPAWN = int(os.getenv("SCRAPER_MAX_SUBFOLDERS", "100"))
+    MAX_SUBFOLDERS_TO_SPAWN = int(os.getenv("SCRAPER_MAX_SUBFOLDERS", "999"))
     """The maximum number of subfolders a single worker can spawn tasks for."""
 
     # ============================================================================
@@ -85,8 +85,21 @@ class ScraperConfig:
     # MONITORING AND SCALING INTERVALS
     # Configures how frequently the system monitors performance and makes scaling decisions.
     # ============================================================================
-    DASHBOARD_UPDATE_INTERVAL = float(os.getenv("SCRAPER_DASHBOARD_INTERVAL", "10.0"))
-    """Frequency of real-time dashboard updates, in seconds."""
+    REAL_TIME_MONITOR_ENABLED = (
+        os.getenv("SCRAPER_MONITOR_ENABLED", "false").lower() == "true"
+    )
+    """Whether to enable the real-time monitoring dashboard."""
+
+    REAL_TIME_MONITOR_INTERVAL = int(os.getenv("SCRAPER_MONITOR_INTERVAL", "20"))
+    """Update interval for the real-time monitor, in seconds."""
+
+    # Legacy dashboard settings (deprecated - use REAL_TIME_MONITOR_* instead)
+    DASHBOARD_UPDATE_INTERVAL = (
+        REAL_TIME_MONITOR_INTERVAL  # Use real-time monitor interval
+    )
+    ENABLE_DASHBOARD = (
+        REAL_TIME_MONITOR_ENABLED  # Use real-time monitor enabled setting
+    )
 
     DASHBOARD_DEMO_INTERVAL = float(os.getenv("SCRAPER_DASHBOARD_DEMO", "5.0"))
     """Update interval for the dashboard's demo mode, in seconds."""
@@ -129,43 +142,42 @@ class ScraperConfig:
 
     # ============================================================================
     # WORKER TRACKING CONFIGURATION
-    # Controls granular worker tracking and output verbosity.
+    # Controls granular worker tracking and output features.
     # ============================================================================
 
     # Worker tracking display options
     SHOW_SCALING = os.getenv("SCRAPER_SHOW_SCALING", "true").lower() == "true"
     """Whether to show scaling decisions in terminal output."""
 
-    SHOW_WORKER_CREATED = os.getenv("SCRAPER_SHOW_CREATED", "true").lower() == "true"
+    SHOW_WORKER_CREATED = os.getenv("SCRAPER_SHOW_CREATED", "false").lower() == "true"
     """Whether to show worker creation events."""
 
-    SHOW_WORKER_STATE = os.getenv("SCRAPER_SHOW_STATE", "false").lower() == "true"
+    SHOW_WORKER_STATE = os.getenv("SCRAPER_SHOW_STATE", "true").lower() == "true"
     """Whether to show worker state transitions."""
 
     SHOW_WORKER_COMPLETED = (
-        os.getenv("SCRAPER_SHOW_COMPLETED", "true").lower() == "true"
+        os.getenv("SCRAPER_SHOW_COMPLETED", "false").lower() == "true"
     )
     """Whether to show worker completion events."""
 
     SHOW_WORKER_ERRORS = os.getenv("SCRAPER_SHOW_ERRORS", "true").lower() == "true"
     """Whether to show worker error events."""
 
-    SHOW_WORKER_STATUS = os.getenv("SCRAPER_SHOW_STATUS", "false").lower() == "true"
+    SHOW_WORKER_STATUS = os.getenv("SCRAPER_SHOW_STATUS", "true").lower() == "true"
     """Whether to show periodic worker status summaries."""
 
     SHOW_WORKER_HIERARCHY = (
-        os.getenv("SCRAPER_SHOW_HIERARCHY", "false").lower() == "true"
+        os.getenv("SCRAPER_SHOW_HIERARCHY", "true").lower() == "true"
     )
     """Whether to show hierarchical worker relationships."""
 
-    SHOW_BROWSER_POOL = (
-        os.getenv("SCRAPER_SHOW_BROWSER_POOL", "false").lower() == "true"
-    )
+    SHOW_BROWSER_POOL = os.getenv("SCRAPER_SHOW_BROWSER_POOL", "true").lower() == "true"
     """Whether to show browser pool utilization status."""
 
-    # Worker tracking verbosity levels
-    WORKER_TRACKING_VERBOSITY = os.getenv("SCRAPER_VERBOSITY", "normal").lower()
-    """Worker tracking verbosity: minimal, normal, detailed, debug."""
+    SHOW_QUEUE_ANALYSIS = (
+        os.getenv("SCRAPER_SHOW_QUEUE_ANALYSIS", "true").lower() == "true"
+    )
+    """Whether to show detailed queue analysis with depth and processing rates."""
 
     MAX_RECENT_COMPLETIONS = int(os.getenv("SCRAPER_MAX_RECENT", "10"))
     """Maximum number of recent completions to track and display."""
@@ -226,19 +238,19 @@ class ScraperConfig:
     # Configures the real-time terminal dashboard.
     # ============================================================================
     REAL_TIME_MONITOR_ENABLED = (
-        os.getenv("SCRAPER_MONITOR_ENABLED", "true").lower() == "true"
+        os.getenv("SCRAPER_MONITOR_ENABLED", "false").lower() == "true"
     )
     """Whether to enable the real-time monitoring dashboard."""
 
-    REAL_TIME_MONITOR_INTERVAL = int(os.getenv("SCRAPER_MONITOR_INTERVAL", "10"))
+    REAL_TIME_MONITOR_INTERVAL = int(os.getenv("SCRAPER_MONITOR_INTERVAL", "20"))
     """Update interval for the real-time monitor, in seconds."""
 
     # ============================================================================
     # DASHBOARD CONTROL (Phase 1 Implementation)
     # Controls the dashboard display behavior for terminal output separation.
     # ============================================================================
-    ENABLE_DASHBOARD = os.getenv("SCRAPER_ENABLE_DASHBOARD", "true").lower() == "true"
-    """Whether to enable the dashboard display in background."""
+    # DEPRECATED: Use REAL_TIME_MONITOR_ENABLED instead
+    # ENABLE_DASHBOARD is now set above to use REAL_TIME_MONITOR_ENABLED
 
 
 class OptimizationConfig:
@@ -251,8 +263,8 @@ class OptimizationConfig:
     BROWSER_REUSE_ENABLED = os.getenv("OPT_BROWSER_REUSE", "true").lower() == "true"
     """Whether to reuse browser instances to reduce startup overhead."""
 
-    BROWSER_POOL_SIZE = int(os.getenv("OPT_BROWSER_POOL_SIZE", "6"))
-    """The number of browser instances to maintain in the pool. Set to 6 to support 102 workers (17 workers per browser)."""
+    BROWSER_POOL_SIZE = int(os.getenv("OPT_BROWSER_POOL_SIZE", "1"))
+    """The number of browser instances to maintain in the pool. Set to 1 for minimal resource usage."""
 
     BROWSER_LAUNCH_OPTIONS = {
         "headless": os.getenv("OPT_BROWSER_HEADLESS", "true").lower() == "true",
@@ -597,7 +609,7 @@ class EnhancedScraperConfig:
     """Enhanced scraper configuration with dynamic scaling support."""
 
     # Worker Scaling Configuration (NO CAPS - User Settings Respected)
-    MAX_WORKERS = int(os.getenv("SCRAPER_MAX_WORKERS", "200"))  # User wants 200
+    MAX_WORKERS = int(os.getenv("SCRAPER_MAX_WORKERS", "500"))  # User wants 500
     MIN_WORKERS = int(os.getenv("SCRAPER_MIN_WORKERS", "20"))
     INITIAL_WORKERS = int(os.getenv("SCRAPER_INITIAL_WORKERS", "50"))
 
@@ -615,9 +627,11 @@ class EnhancedScraperConfig:
     MEMORY_THRESHOLD_MB = int(os.getenv("SCRAPER_MEMORY_THRESHOLD", "500"))
     CPU_THRESHOLD_PERCENT = int(os.getenv("SCRAPER_CPU_THRESHOLD", "85"))
 
-    # Browser Pool Configuration (DYNAMIC SCALING SUPPORT)
-    # Calculate required browsers for max workers (max_workers ÷ 17 workers per browser)
-    BROWSER_POOL_SIZE = max(6, (MAX_WORKERS // 17) + 1)  # Dynamic browser pool
+    # Browser Pool Configuration
+    # Use simple configurable browser pool size (set via OPT_BROWSER_POOL_SIZE environment variable)
+    BROWSER_POOL_SIZE = (
+        OptimizationConfig.BROWSER_POOL_SIZE
+    )  # Use simple configurable value
     BROWSER_REUSE_THRESHOLD = int(os.getenv("SCRAPER_BROWSER_REUSE", "100"))
     CIRCUIT_BREAKER_THRESHOLD = int(os.getenv("SCRAPER_CIRCUIT_BREAKER", "5"))
     BROWSER_LAUNCH_DELAY = float(os.getenv("SCRAPER_BROWSER_DELAY", "1.0"))

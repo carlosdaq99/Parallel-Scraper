@@ -39,8 +39,10 @@ except ImportError:
 
     class OptimizationConfig:
         BROWSER_REUSE_ENABLED = True
+        # BROWSER_POOL_SIZE is now set in config.py via OPT_BROWSER_POOL_SIZE environment variable
+        # Default fallback only (main config takes precedence)
         BROWSER_POOL_SIZE = (
-            6  # Increased for proactive scaling (supports up to 100 workers)
+            6  # Fallback default - actual value from config.py OptimizationConfig
         )
         RESOURCE_FILTERING_ENABLED = True
         MEMORY_MANAGEMENT_ENABLED = True
