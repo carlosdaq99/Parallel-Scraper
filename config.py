@@ -156,7 +156,7 @@ class ScraperConfig:
     """Whether to show worker state transitions."""
 
     SHOW_WORKER_COMPLETED = (
-        os.getenv("SCRAPER_SHOW_COMPLETED", "false").lower() == "true"
+        os.getenv("SCRAPER_SHOW_COMPLETED", "true").lower() == "true"
     )
     """Whether to show worker completion events."""
 
@@ -167,7 +167,7 @@ class ScraperConfig:
     """Whether to show periodic worker status summaries."""
 
     SHOW_WORKER_HIERARCHY = (
-        os.getenv("SCRAPER_SHOW_HIERARCHY", "true").lower() == "true"
+        os.getenv("SCRAPER_SHOW_HIERARCHY", "false").lower() == "true"
     )
     """Whether to show hierarchical worker relationships."""
 

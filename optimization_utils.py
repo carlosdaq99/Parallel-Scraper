@@ -30,26 +30,27 @@ except ImportError:
     Page = type(None)
 
 try:
-    from .config import ScraperConfig, OptimizationConfig
+    from config import ScraperConfig, OptimizationConfig
 except ImportError:
-    # Fallback configuration if unified config not available
-    class ScraperConfig:
-        BROWSER_HEADLESS = True
-        BROWSER_TIMEOUT = 30000
+    try:
+        from .config import ScraperConfig, OptimizationConfig
+    except ImportError:
+        # Fallback configuration if unified config not available
+        import os
+        class ScraperConfig:
+            BROWSER_HEADLESS = True
+            BROWSER_TIMEOUT = 30000
 
-    class OptimizationConfig:
-        BROWSER_REUSE_ENABLED = True
-        # BROWSER_POOL_SIZE is now set in config.py via OPT_BROWSER_POOL_SIZE environment variable
-        # Default fallback only (main config takes precedence)
-        BROWSER_POOL_SIZE = (
-            6  # Fallback default - actual value from config.py OptimizationConfig
-        )
-        RESOURCE_FILTERING_ENABLED = True
-        MEMORY_MANAGEMENT_ENABLED = True
-        BLOCKED_RESOURCE_TYPES = ["image", "media", "font", "stylesheet", "other"]
-        ALLOWED_DOMAINS = ["help.autodesk.com"]
-        MAX_MEMORY_MB = 512
-        GARBAGE_COLLECTION_INTERVAL = 100
+        class OptimizationConfig:
+            BROWSER_REUSE_ENABLED = True
+            # Use same environment variable as config.py for consistency
+            BROWSER_POOL_SIZE = int(os.getenv("OPT_BROWSER_POOL_SIZE", "1"))
+            RESOURCE_FILTERING_ENABLED = True
+            MEMORY_MANAGEMENT_ENABLED = True
+            BLOCKED_RESOURCE_TYPES = ["image", "media", "font", "stylesheet", "other"]
+            ALLOWED_DOMAINS = ["help.autodesk.com"]
+            MAX_MEMORY_MB = 512
+            GARBAGE_COLLECTION_INTERVAL = 100
 
 
 logger = logging.getLogger(__name__)

@@ -145,6 +145,21 @@ from data_structures import ParallelWorkerContext
 # All configuration is determined entirely in config.py - no fallbacks here
 from config import ScraperConfig
 
+# Global reference to worker count function - set up by main module to avoid circular imports
+_get_current_workers_func = None
+
+def set_worker_count_callback(func):
+    """Set the function to get current worker count to avoid circular imports."""
+    global _get_current_workers_func
+    _get_current_workers_func = func
+
+def _get_current_workers():
+    """Get current worker count using callback or fallback."""
+    if _get_current_workers_func:
+        return _get_current_workers_func()
+    # Fallback to tracked worker states if callback not set
+    return len(_worker_states) if '_worker_states' in globals() else 50
+
 
 # ============================================================================
 # TRACKER STATE MANAGEMENT
@@ -1143,6 +1158,10 @@ def log_scaling_decision(old_count: int, new_count: int, reason: str) -> None:
 
     print(f"[{timestamp}] SCALING: {old_count} → {new_count} workers ({action})")
     print(f"           Reason: {reason}")
+    
+    # Calculate and show browser pool recommendation 
+    optimal_browsers = min(6, max(1, new_count // 17))
+    print(f"           Browser Pool: {optimal_browsers} browsers recommended for {new_count} workers")
 
     # Store in scaling history
     scaling_entry = {
@@ -1398,23 +1417,28 @@ def sync_browser_pool_with_optimization_metrics() -> None:
             browser_id = f"Browser-{i+1}"
             health = "Good" if circuit_breaker_status == "closed" else "Warning"
 
-            # Calculate estimated workers per browser using actual worker count
-            # Import here to avoid circular dependency
+            # Calculate workers per browser using current actual worker count
             try:
-                from main_self_contained import get_current_workers
-
-                current_workers = get_current_workers()
-                estimated_workers = (
-                    max(0, current_workers // pool_size) if pool_size > 0 else 0
-                )
-            except ImportError:
+                current_workers = _get_current_workers()
+            except Exception:
                 # Fallback to tracked worker states if main module not available
-                estimated_workers = (
-                    max(0, len(_worker_states) // pool_size) if pool_size > 0 else 0
-                )
+                current_workers = len(_worker_states)
+                if ScraperConfig.SHOW_BROWSER_POOL:
+                    print(f"DEBUG: Browser pool sync (fallback) - Current workers: {current_workers}, Pool size: {pool_size}")
+
+            # For single browser pool, show all workers on that browser
+            # For multiple browsers, distribute workers approximately evenly
+            if pool_size == 1:
+                workers_per_browser = current_workers
+            else:
+                # Distribute workers among browsers (show actual distribution)
+                workers_per_browser = current_workers // pool_size
+                # Give remainder to first browser
+                if i == 0:
+                    workers_per_browser += current_workers % pool_size
 
             pool_status[browser_id] = {
-                "workers": estimated_workers,  # Show actual worker distribution
+                "workers": workers_per_browser,  # Show actual current worker count
                 "health": health,
                 "reuse_rate": f"{reuse_rate:.1%}",
                 "last_update": datetime.now().strftime("%H:%M:%S"),
@@ -1480,62 +1504,85 @@ def show_current_status(context: Optional[ParallelWorkerContext] = None) -> None
             pass  # Ignore if queue access fails
 
 
-def show_hierarchy_status() -> None:
-    """Show hierarchical worker status (configurable)."""
+def show_hierarchy_status(context: Optional[ParallelWorkerContext] = None) -> None:
+    """Show hierarchical task status in user's preferred format."""
     if not ScraperConfig.SHOW_WORKER_HIERARCHY:
         return
 
     timestamp = datetime.now().strftime("%H:%M:%S")
-    print(f"[{timestamp}] WORKER HIERARCHY:")
-
-    # Try to get actual worker count from main system
-    try:
-        from main_self_contained import get_current_workers
-
-        current_workers = get_current_workers()
-
-        if current_workers > 0:
-            # Show current worker summary since individual tracking may be disabled
-            print(f"           Total Active Workers: {current_workers}")
-
-            # Generate estimated hierarchy display
-            # Assume workers are numbered 1, 2, 3... for basic hierarchy
-            if current_workers <= 10:
-                # Show individual workers for small counts
-                for i in range(1, current_workers + 1):
-                    print(f"           Worker-{i}: active")
+    
+    # Get completed tasks from worker context if available
+    completed_tasks = {}
+    if context and hasattr(context, 'completed_tasks'):
+        completed_tasks = context.completed_tasks
+    
+    # Fall back to tracker state if no context
+    if not completed_tasks:
+        global _tracker_state
+        tasks = _tracker_state.get("tasks", {})
+        # Filter for completed tasks only
+        completed_tasks = {k: v for k, v in tasks.items() if v.get("status") == "completed"}
+    
+    if not completed_tasks:
+        # Only show "no tasks" message occasionally to avoid spam
+        if not hasattr(show_hierarchy_status, 'last_empty_message'):
+            show_hierarchy_status.last_empty_message = 0
+        
+        current_time = time.time()
+        if current_time - show_hierarchy_status.last_empty_message > 30:  # Show only every 30 seconds
+            print(f"[{timestamp}]      Task    [No completed tasks yet]")
+            show_hierarchy_status.last_empty_message = current_time
+        return
+    
+    # Display recently completed tasks in user's preferred format
+    displayed_count = 0
+    recent_tasks = list(completed_tasks.items())[-5:]  # Show last 5 completed tasks
+    
+    for task_id, task_info in recent_tasks:
+        if displayed_count >= 5:  # Limit display to prevent spam
+            break
+            
+        # Get task metadata - handle both tracker format and worker context format
+        if isinstance(task_info, dict):
+            # Tracker state format
+            metadata = task_info.get("metadata", {})
+            children_count = len(task_info.get("children_ids", set()))
+            path = metadata.get("path", "") or metadata.get("url", "")
+            depth = metadata.get("depth", 0)
+        else:
+            # Worker context NodeInfo format
+            path = getattr(task_info, 'path', "")
+            depth = getattr(task_info, 'depth', 0)
+            children_count = len(getattr(task_info, 'subfolders', []))
+        
+        # Create a simplified path indicator like [2.4.23.1]
+        if path and "/" in path:
+            # Extract meaningful path components from URL
+            path_parts = [p for p in path.split("/") if p and p not in ["", "docs", "view", "OARX", "2023", "ENU"]]
+            if len(path_parts) >= 1 and "guid=" in path_parts[-1]:
+                # Extract guid part for cleaner display
+                guid_part = path_parts[-1].split("guid=")[-1]
+                if len(guid_part) > 20:
+                    guid_part = guid_part[:20] + "..."
+                path_indicator = f"{depth}.{guid_part}"
+            elif len(path_parts) >= 2:
+                # Use last 2 meaningful parts
+                path_indicator = f"{depth}.{'.'.join(path_parts[-2:])}"
             else:
-                # Show hierarchical summary for larger counts
-                print(
-                    f"           Level 0: Worker-1 to Worker-{min(10, current_workers)} (primary workers)"
-                )
-                if current_workers > 10:
-                    remaining = current_workers - 10
-                    print(
-                        f"           Level 1: +{remaining} additional workers (scaling tier)"
-                    )
+                path_indicator = f"{depth}.{displayed_count + 1}"
         else:
-            print("           No active workers currently running")
-
-    except ImportError:
-        # Fallback: use tracked worker states if available
-        hierarchy_levels = {}
-        for worker_id, state in _worker_states.items():
-            level = worker_id.count(".") if "." in worker_id else 0
-            if level not in hierarchy_levels:
-                hierarchy_levels[level] = []
-            hierarchy_levels[level].append((worker_id, state))
-
-        if hierarchy_levels:
-            # Display hierarchically
-            for level in sorted(hierarchy_levels.keys()):
-                indent = "  " * level
-                for worker_id, state in hierarchy_levels[level]:
-                    print(f"           {indent}{worker_id}: {state}")
+            # Fallback: use depth and position
+            path_indicator = f"{depth}.{displayed_count + 1}"
+        
+        # Format according to user's specification
+        if children_count > 0:
+            # Task that spawned children
+            print(f"[{timestamp}]      Task    [{path_indicator}]    --    spawned {children_count}")
         else:
-            print(
-                "           No worker hierarchy data available (individual worker tracking disabled)"
-            )
+            # Leaf node that completed
+            print(f"[{timestamp}]      Task    [{path_indicator}]    --    LEAF node")
+        
+        displayed_count += 1
 
 
 def show_recent_completions() -> None:
@@ -1646,7 +1693,7 @@ async def start_worker_tracking_monitor(
                 show_current_status(context)
 
             if ScraperConfig.SHOW_WORKER_HIERARCHY:
-                show_hierarchy_status()
+                show_hierarchy_status(context)
 
         except asyncio.CancelledError:
             # Re-raise CancelledError for proper cleanup
@@ -1754,7 +1801,7 @@ def test_worker_tracking_display() -> None:
 
     # Test status display
     show_current_status()
-    show_hierarchy_status()
+    show_hierarchy_status()  # Test call without context
     show_recent_completions()
 
     print("✅ Function-based worker tracking test completed")

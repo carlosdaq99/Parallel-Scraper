@@ -28,12 +28,13 @@ import logging
 import argparse
 import signal
 import json
+import sys
+import psutil
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from pathlib import Path
 from playwright.async_api import async_playwright
-import sys
 
 # Import self-contained configuration and optimization
 try:
@@ -60,6 +61,7 @@ try:
         get_worker_tracking_config,
         create_tracker,
         start_worker_tracking_monitor,
+        set_worker_count_callback,
     )
     from auto_tuning_engine import (
         initialize_auto_tuning,
@@ -229,27 +231,14 @@ def update_worker_count(new_count: int, reason: str = "Adaptive scaling") -> Non
 
     # Validate new count within proactive range
     new_count = max(min_workers, min(new_count, max_workers))
-    log_scaling_decision(
-        old_count,
-        new_count,
-        f"Worker count validated to {new_count} (range: {min_workers}-{max_workers})",
-    )
 
     _adaptive_workers = new_count
-
-    # Calculate optimal browser pool size
-    optimal_browsers = min(6, max(1, new_count // 17))
-
+    
     # Update the global scaling engine worker count (CRITICAL: This synchronizes the scaling engine)
     set_current_worker_count(new_count)
 
-    # Log scaling decision to worker tracking display
+    # Log scaling decision to worker tracking display (single, structured output)
     log_scaling_decision(old_count, new_count, reason)
-
-    print(f"Workers adjusted: {old_count} -> {new_count} ({reason})")
-    print(
-        f"Browser pool recommendation: {optimal_browsers} browsers for {new_count} workers"
-    )
 
 
 async def scale_workers_to_target(
@@ -262,11 +251,8 @@ async def scale_workers_to_target(
     ]
     current_count = len(worker_tasks)
 
-    log_scaling_decision(current_count, target_count, "Adaptive scaling")
-
     if target_count > current_count:
         # Create new worker tasks
-        new_tasks_created = 0
         for i in range(current_count, target_count):
             try:
                 worker_id = i  # parallel_worker expects int worker_id
@@ -275,7 +261,6 @@ async def scale_workers_to_target(
                     name=f"worker-{worker_id}",
                 )
                 current_tasks.append(task)
-                new_tasks_created += 1
 
                 # Log worker creation to tracking display
                 log_worker_creation(f"Worker-{worker_id}")
@@ -286,23 +271,12 @@ async def scale_workers_to_target(
                 log_worker_error(f"Worker-{i}", f"Creation error: {e}")
                 break
 
-        log_scaling_decision(
-            current_count,
-            current_count + new_tasks_created,
-            f"Scale up: Created {new_tasks_created} new worker tasks",
-        )
-
     elif target_count < current_count:
         # For scale-down, signal workers to shutdown gracefully
         # Note: This is more complex and may require worker-level shutdown signaling
-        workers_to_shutdown = current_count - target_count
-        log_scaling_decision(
-            current_count,
-            target_count,
-            f"Scale down: Need to shutdown {workers_to_shutdown} workers",
-        )
         # Implementation note: Worker shutdown requires coordination with worker logic
         # For now, we'll rely on natural worker completion
+        pass
 
     return current_tasks
 
@@ -369,8 +343,6 @@ async def perform_adaptive_scaling_check(
 
         # Get real system metrics
         try:
-            import psutil
-
             cpu_usage = psutil.cpu_percent(
                 interval=1.0
             )  # Use 1 second for accurate reading
@@ -404,9 +376,7 @@ async def perform_adaptive_scaling_check(
         # Call the FIXED make_scaling_decision_simple function with proper parameters
         scaling_decision = make_scaling_decision_simple(metrics_dict)
 
-        print(f"Scaling decision from FIXED engine: {scaling_decision}")
-
-        # Apply the scaling decision from the FIXED engine
+        # Apply the scaling decision from the FIXED engine (consolidated logging)
         if scaling_decision.get("action") == "scale_up":
             # Get dynamic scaling increment from config (no hardcoded fallback)
             enhanced_config = get_enhanced_config()
@@ -416,18 +386,6 @@ async def perform_adaptive_scaling_check(
             target_workers = scaling_decision.get(
                 "target_workers", current_workers + scale_increment
             )
-
-            # DIAGNOSTIC: Log when fallback is used
-            if "target_workers" not in scaling_decision:
-                print(
-                    f"WARNING: FALLBACK TRIGGERED: scaling_decision missing 'target_workers', "
-                    f"using config fallback (+{scale_increment})"
-                )
-                print(f"WARNING: scaling_decision contents: {scaling_decision}")
-            else:
-                print(
-                    f"SUCCESS: Using scaling engine target_workers: {scaling_decision['target_workers']}"
-                )
             update_worker_count(
                 target_workers,
                 f"FIXED engine scale-up: {scaling_decision.get('reasoning', 'High performance')}",
@@ -443,19 +401,10 @@ async def perform_adaptive_scaling_check(
                     tasks[:] = await scale_workers_to_target(
                         target_workers, tasks, worker_context, playwright
                     )
-                    log_scaling_decision(
-                        current_workers,
-                        target_workers,
-                        f"Scaling applied: Workers changed from {current_workers} to {target_workers}",
-                    )
+                    # Sync browser pool status after workers are actually created/modified
+                    sync_browser_pool_with_optimization_metrics()
                 except Exception as e:
                     log_worker_error("System", f"Failed to scale workers: {e}")
-            else:
-                log_scaling_decision(
-                    current_workers,
-                    current_workers,
-                    "Scaling skipped: Missing parameters for dynamic worker scaling",
-                )
 
             _last_scaling_time = current_time
 
@@ -469,17 +418,6 @@ async def perform_adaptive_scaling_check(
                 "target_workers", current_workers - scale_decrement
             )
 
-            # DIAGNOSTIC: Log when fallback is used
-            if "target_workers" not in scaling_decision:
-                print(
-                    f"WARNING: FALLBACK TRIGGERED: scaling_decision missing 'target_workers', "
-                    f"using config fallback (-{scale_decrement})"
-                )
-                print(f"WARNING: scaling_decision contents: {scaling_decision}")
-            else:
-                print(
-                    f"SUCCESS: Using scaling engine target_workers: {scaling_decision['target_workers']}"
-                )
             update_worker_count(
                 target_workers,
                 f"FIXED engine scale-down: {scaling_decision.get('reasoning', 'Poor performance')}",
@@ -495,19 +433,10 @@ async def perform_adaptive_scaling_check(
                     tasks[:] = await scale_workers_to_target(
                         target_workers, tasks, worker_context, playwright
                     )
-                    log_scaling_decision(
-                        current_workers,
-                        target_workers,
-                        f"Scaling applied: Workers changed from {current_workers} to {target_workers}",
-                    )
+                    # Sync browser pool status after workers are actually created/modified
+                    sync_browser_pool_with_optimization_metrics()
                 except Exception as e:
                     log_worker_error("System", f"Failed to scale workers: {e}")
-            else:
-                log_scaling_decision(
-                    current_workers,
-                    current_workers,
-                    "Scaling skipped: Missing parameters for dynamic worker scaling",
-                )
 
             _last_scaling_time = current_time
 
@@ -515,9 +444,6 @@ async def perform_adaptive_scaling_check(
             print(
                 f"FIXED engine: No scaling needed - {scaling_decision.get('reasoning', 'Performance stable')}"
             )
-
-        # Sync browser pool status after any scaling operation
-        sync_browser_pool_with_optimization_metrics()
 
     except Exception as e:
         print(f"Adaptive scaling check failed: {e}")
@@ -753,6 +679,9 @@ async def main():
     # Initialize FIXED adaptive scaling
     initialize_adaptive_scaling()
 
+    # Set up worker count callback to avoid circular imports
+    set_worker_count_callback(get_current_workers)
+
     # Configure logging based on performance test mode
     if app_config.performance_test_mode:
         logging.getLogger().setLevel(logging.WARNING)
@@ -782,8 +711,27 @@ async def main():
     # Set up signal handlers for graceful shutdown
     def signal_handler():
         """Handle shutdown signals gracefully."""
+        print("\n🛑 SHUTDOWN SIGNAL RECEIVED (Ctrl+C)")
+        print("   Setting stop event and cancelling all tasks...")
         manager.logger.info("Received shutdown signal (Ctrl+C)")
         stop_event.set()
+        
+        # Cancel all running tasks immediately
+        if 'tasks' in locals() and tasks:
+            print(f"   Cancelling {len(tasks)} active tasks...")
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+        
+        # Force exit if signal received multiple times
+        if hasattr(signal_handler, 'call_count'):
+            signal_handler.call_count += 1
+            if signal_handler.call_count > 1:
+                print("🔴 FORCE EXIT: Multiple Ctrl+C detected")
+                import os
+                os._exit(1)
+        else:
+            signal_handler.call_count = 1
 
     # Register signal handlers for different platforms
     if hasattr(signal, "SIGINT"):
@@ -1103,6 +1051,11 @@ async def monitor_progress_and_scaling(
 
     while not stop_event.is_set():
         try:
+            # Check stop event more frequently
+            if stop_event.is_set():
+                print("🛑 Monitor stopping due to stop_event")
+                break
+                
             current_time = time.time()
 
             # Progress reporting
@@ -1120,13 +1073,19 @@ async def monitor_progress_and_scaling(
                 )
                 manager.last_performance_check = current_time
 
-            await asyncio.sleep(
-                ScraperConfig.SCALING_CHECK_INTERVAL
-            )  # Check every 5 seconds
+            # Shorter sleep with frequent stop_event checks
+            for _ in range(10):  # Check stop_event 10 times per second
+                if stop_event.is_set():
+                    print("🛑 Monitor stopping due to stop_event during sleep")
+                    return
+                await asyncio.sleep(0.1)  # 0.1 second micro-sleeps
 
+        except asyncio.CancelledError:
+            print("🛑 Monitor task cancelled")
+            raise  # Re-raise CancelledError for proper cleanup
         except Exception as e:
             manager.logger.warning("Progress monitoring error: %s", e)
-            await asyncio.sleep(ScraperConfig.SCALING_CHECK_INTERVAL)
+            await asyncio.sleep(1.0)  # Longer sleep on error
 
 
 if __name__ == "__main__":

@@ -386,9 +386,11 @@ async def parallel_worker(context, playwright, worker_id):
                 tasks_processed += 1
 
                 # Log worker completion to tracking display
+                # Extract hierarchical path (part after last underscore) for display
+                task_path = task.worker_id.split('_')[-1] if '_' in task.worker_id else task.worker_id
                 log_worker_completion(
                     f"Worker-{worker_id}",
-                    f"Task-{task.worker_id}",
+                    f"Task-[{task_path}]",
                     task_duration,
                     len(result) if isinstance(result, list) else 0,
                 )
